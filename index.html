@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0d1220">
-<meta name="description" content="Every tool built by JBERRY2347, in one place. Browser apps that run on your device.">
-<title>JBERRY2347 · Tools</title>
+<meta name="description" content="Every app built by JBERRY2347, in one place. They all run in your browser, on your device.">
+<title>JBERRY2347 · Apps</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./apple-touch-icon.png">
@@ -98,27 +98,27 @@
   <header>
     <img class="logo" src="./icon.svg" alt="" width="44" height="44">
     <div>
-      <h1 id="site-name">JBERRY2347 · Tools</h1>
-      <p id="site-tagline">Every tool I've built, in one place.</p>
+      <h1 id="site-name">JBERRY2347 · Apps</h1>
+      <p id="site-tagline">Every app I've built, in one place.</p>
     </div>
   </header>
 
   <div class="toolbar">
-    <input class="search" id="q" type="search" placeholder="Search tools…" aria-label="Search tools" autocomplete="off">
+    <input class="search" id="q" type="search" placeholder="Search apps…" aria-label="Search apps" autocomplete="off">
     <div class="chips" id="chips" role="group" aria-label="Filter by category"></div>
   </div>
 
   <section class="grid" id="grid" aria-live="polite"></section>
-  <p class="empty" id="empty" hidden>No tools match that search.</p>
+  <p class="empty" id="empty" hidden>No apps match that search.</p>
   <noscript>
-    <p class="error">This page needs JavaScript to list the tools. Direct links:
+    <p class="error">This page needs JavaScript to list the apps. Direct links:
       <a href="./cuesight/">CueSight</a> · <a href="./holdtheline/">Hold the Line</a></p>
   </noscript>
 
   <footer>
     <span id="count"></span> · Everything runs in your browser, on your device.
     · <a id="gh" href="https://github.com/JBERRY2347" rel="noopener">GitHub</a>
-    · <a href="./tools.json">registry</a>
+    · <a href="./apps.json">registry</a>
   </footer>
 </main>
 
@@ -132,11 +132,11 @@
 
   let data;
   try {
-    const res = await fetch('./tools.json', { cache: 'no-cache' });
+    const res = await fetch('./apps.json', { cache: 'no-cache' });
     if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
     data = await res.json();
   } catch (err) {
-    grid.innerHTML = '<p class="error">Could not load tools.json (' + esc(err.message) + ').</p>';
+    grid.innerHTML = '<p class="error">Could not load apps.json (' + esc(err.message) + ').</p>';
     return;
   }
 
@@ -145,8 +145,8 @@
   if (site.tagline) document.getElementById('site-tagline').textContent = site.tagline;
   if (site.github) document.getElementById('gh').href = site.github;
 
-  const tools = (data.tools || []).filter(t => t.status !== 'archived' || location.hash === '#all');
-  const categories = ['All', ...new Set(tools.map(t => t.category).filter(Boolean))];
+  const apps = (data.apps || []).filter(t => t.status !== 'archived' || location.hash === '#all');
+  const categories = ['All', ...new Set(apps.map(t => t.category).filter(Boolean))];
   let active = 'All';
 
   categories.forEach(c => {
@@ -161,13 +161,13 @@
 
   function render() {
     const needle = q.value.trim().toLowerCase();
-    const shown = tools.filter(t =>
+    const shown = apps.filter(t =>
       (active === 'All' || t.category === active) &&
       (!needle || [t.name, t.tagline, t.description, t.category, ...(t.tags || [])].join(' ').toLowerCase().includes(needle))
     );
     grid.innerHTML = shown.map(card).join('');
     empty.hidden = shown.length > 0;
-    count.textContent = shown.length + ' of ' + tools.length + ' tool' + (tools.length === 1 ? '' : 's');
+    count.textContent = shown.length + ' of ' + apps.length + ' app' + (apps.length === 1 ? '' : 's');
   }
 
   function card(t) {

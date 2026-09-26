@@ -1,12 +1,12 @@
 {
-  "$schema": "./tools.schema.json",
+  "$schema": "./apps.schema.json",
   "site": {
-    "name": "JBERRY2347 Tools",
-    "tagline": "Every tool I've built, in one place.",
+    "name": "JBERRY2347 Apps",
+    "tagline": "Every app I've built, in one place.",
     "owner": "JBERRY2347",
     "github": "https://github.com/JBERRY2347"
   },
-  "tools": [
+  "apps": [
     {
       "id": "cuesight",
       "name": "CueSight",
