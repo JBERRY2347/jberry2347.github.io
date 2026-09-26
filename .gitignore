@@ -1,0 +1,4 @@
+# Local checkouts of tool repos for previewing the hub. Each tool is served from its own repo.
+/cuesight
+/holdtheline
+.DS_Store

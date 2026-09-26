@@ -2,20 +2,202 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0d1220">
-<title>JBERRY2347 · Apps</title>
+<meta name="description" content="Every tool built by JBERRY2347, in one place. Browser apps that run on your device.">
+<title>JBERRY2347 · Tools</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
 <style>
-body{background:#0d1220;color:#e8edf8;font-family:'Segoe UI',system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center;padding:20px}
-a{display:inline-block;margin-top:18px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;text-decoration:none;padding:12px 22px;border-radius:12px;font-weight:600}
-h1{color:#4da3ff}
+  :root {
+    --bg: #0d1220;
+    --panel: #141b2e;
+    --panel-2: #1a2238;
+    --line: #26304b;
+    --text: #e8edf8;
+    --muted: #9aa7c2;
+    --accent: #4da3ff;
+    --grad: linear-gradient(135deg, #2563eb, #7c3aed);
+    --ok: #3ddc97;
+    --warn: #f5b942;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  a { color: var(--accent); }
+  main { max-width: 1040px; margin: 0 auto; }
+
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  header .logo { width: 44px; height: 44px; border-radius: 12px; flex: none; }
+  header h1 { margin: 0; font-size: 1.5rem; color: var(--accent); letter-spacing: .01em; }
+  header p { margin: 0; color: var(--muted); font-size: .95rem; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 16px; align-items: center; }
+  .search {
+    flex: 1 1 220px; min-width: 0;
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    padding: 10px 14px; border-radius: 12px; font-size: 1rem; outline: none;
+  }
+  .search:focus { border-color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+    padding: 6px 12px; border-radius: 999px; font-size: .85rem; cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--grad); color: #fff; border-color: transparent; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    transition: border-color .15s, transform .15s;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card-head { display: flex; gap: 12px; align-items: center; }
+  .icon {
+    width: 56px; height: 56px; border-radius: 14px; flex: none; object-fit: cover;
+    background: var(--panel-2); display: grid; place-items: center;
+    font-weight: 700; font-size: 1.2rem; color: #fff;
+  }
+  .card h2 { margin: 0; font-size: 1.1rem; }
+  .card .tagline { margin: 0; color: var(--muted); font-size: .9rem; }
+  .card .desc { margin: 0; font-size: .93rem; color: #c9d3ea; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: .75rem; color: var(--muted); background: var(--panel-2); padding: 3px 8px; border-radius: 6px; }
+  .status { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 6px; margin-left: auto; }
+  .status.live { color: var(--ok); background: rgba(61,220,151,.12); }
+  .status.beta, .status.wip { color: var(--warn); background: rgba(245,185,66,.12); }
+  .status.archived { color: var(--muted); background: var(--panel-2); }
+  .actions { display: flex; gap: 10px; margin-top: auto; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; text-decoration: none; padding: 10px 16px; border-radius: 12px;
+    font-weight: 600; font-size: .95rem; text-align: center;
+  }
+  .btn.primary { background: var(--grad); color: #fff; flex: 1 1 120px; }
+  .btn.ghost { border: 1px solid var(--line); color: var(--muted); }
+  .btn.ghost:hover { color: var(--text); border-color: var(--accent); }
+
+  .empty, .error { color: var(--muted); text-align: center; padding: 40px 12px; }
+  .error { color: #ff8a8a; }
+  footer { margin-top: 36px; color: var(--muted); font-size: .85rem; text-align: center; }
+  footer a { color: var(--muted); }
+  @media (max-width: 480px) { .grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
-<div>
-<h1>CueSight</h1>
-<p>Expression &amp; cue reader — runs entirely on your device.</p>
-<a href="./cuesight/">Open CueSight →</a>
-</div>
+<main>
+  <header>
+    <img class="logo" src="./icon.svg" alt="" width="44" height="44">
+    <div>
+      <h1 id="site-name">JBERRY2347 · Tools</h1>
+      <p id="site-tagline">Every tool I've built, in one place.</p>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <input class="search" id="q" type="search" placeholder="Search tools…" aria-label="Search tools" autocomplete="off">
+    <div class="chips" id="chips" role="group" aria-label="Filter by category"></div>
+  </div>
+
+  <section class="grid" id="grid" aria-live="polite"></section>
+  <p class="empty" id="empty" hidden>No tools match that search.</p>
+  <noscript>
+    <p class="error">This page needs JavaScript to list the tools. Direct links:
+      <a href="./cuesight/">CueSight</a> · <a href="./holdtheline/">Hold the Line</a></p>
+  </noscript>
+
+  <footer>
+    <span id="count"></span> · Everything runs in your browser, on your device.
+    · <a id="gh" href="https://github.com/JBERRY2347" rel="noopener">GitHub</a>
+    · <a href="./tools.json">registry</a>
+  </footer>
+</main>
+
+<script>
+(async () => {
+  const grid = document.getElementById('grid');
+  const chips = document.getElementById('chips');
+  const q = document.getElementById('q');
+  const empty = document.getElementById('empty');
+  const count = document.getElementById('count');
+
+  let data;
+  try {
+    const res = await fetch('./tools.json', { cache: 'no-cache' });
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    data = await res.json();
+  } catch (err) {
+    grid.innerHTML = '<p class="error">Could not load tools.json (' + esc(err.message) + ').</p>';
+    return;
+  }
+
+  const site = data.site || {};
+  if (site.name) { document.title = site.name; document.getElementById('site-name').textContent = site.name; }
+  if (site.tagline) document.getElementById('site-tagline').textContent = site.tagline;
+  if (site.github) document.getElementById('gh').href = site.github;
+
+  const tools = (data.tools || []).filter(t => t.status !== 'archived' || location.hash === '#all');
+  const categories = ['All', ...new Set(tools.map(t => t.category).filter(Boolean))];
+  let active = 'All';
+
+  categories.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.textContent = c; b.type = 'button';
+    b.setAttribute('aria-pressed', c === active);
+    b.onclick = () => { active = c; [...chips.children].forEach(x => x.setAttribute('aria-pressed', x.textContent === c)); render(); };
+    chips.appendChild(b);
+  });
+  q.addEventListener('input', render);
+  render();
+
+  function render() {
+    const needle = q.value.trim().toLowerCase();
+    const shown = tools.filter(t =>
+      (active === 'All' || t.category === active) &&
+      (!needle || [t.name, t.tagline, t.description, t.category, ...(t.tags || [])].join(' ').toLowerCase().includes(needle))
+    );
+    grid.innerHTML = shown.map(card).join('');
+    empty.hidden = shown.length > 0;
+    count.textContent = shown.length + ' of ' + tools.length + ' tool' + (tools.length === 1 ? '' : 's');
+  }
+
+  function card(t) {
+    const initials = esc((t.name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase());
+    const icon = t.icon
+      ? '<img class="icon" src="' + esc(t.icon) + '" alt="" width="56" height="56" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{className:\'icon\',textContent:\'' + initials + '\'}))">'
+      : '<div class="icon">' + initials + '</div>';
+    const status = t.status || 'live';
+    const tags = (t.tags || []).map(x => '<span class="tag">' + esc(x) + '</span>').join('');
+    const platforms = (t.platforms || []).filter(p => p !== 'web').map(p => '<span class="tag">' + esc(p) + ' app</span>').join('');
+    return '<article class="card" data-id="' + esc(t.id) + '">' +
+      '<div class="card-head">' + icon +
+        '<div><h2>' + esc(t.name) + '</h2><p class="tagline">' + esc(t.tagline || '') + '</p></div>' +
+        '<span class="status ' + esc(status) + '">' + esc(status) + '</span>' +
+      '</div>' +
+      (t.description ? '<p class="desc">' + esc(t.description) + '</p>' : '') +
+      (tags || platforms ? '<div class="tags">' + tags + platforms + '</div>' : '') +
+      '<div class="actions">' +
+        '<a class="btn primary" href="' + esc(t.url) + '">Open ' + esc(t.name) + ' →</a>' +
+        (t.repo ? '<a class="btn ghost" href="' + esc(t.repo) + '" rel="noopener">Source</a>' : '') +
+        (t.privacy ? '<a class="btn ghost" href="' + esc(t.privacy) + '">Privacy</a>' : '') +
+      '</div>' +
+    '</article>';
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+})();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+</script>
 </body>
 </html>
