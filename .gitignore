@@ -1,0 +1,4 @@
+# Local checkouts of app repos for previewing the hub. Each app is served from its own repo.
+/cuesight
+/holdtheline
+.DS_Store

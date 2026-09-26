@@ -1,0 +1,40 @@
+{
+  "$schema": "./apps.schema.json",
+  "site": {
+    "name": "JBERRY2347 Apps",
+    "tagline": "Every app I've built, in one place.",
+    "owner": "JBERRY2347",
+    "github": "https://github.com/JBERRY2347"
+  },
+  "apps": [
+    {
+      "id": "cuesight",
+      "name": "CueSight",
+      "tagline": "Expression & cue reader",
+      "description": "On-device facial expression, micro-expression and voice-cue reader with a guided baseline, truth/lie calibration and a built-in trainer. A cue reader, not a lie detector.",
+      "url": "./cuesight/",
+      "repo": "https://github.com/JBERRY2347/cuesight",
+      "icon": "./cuesight/icon-192.png",
+      "category": "Utilities",
+      "tags": ["camera", "microphone", "on-device", "offline", "PWA"],
+      "platforms": ["web", "android"],
+      "android_package": "io.github.jberry2347.cuesight",
+      "privacy": "./cuesight/privacy.html",
+      "status": "live"
+    },
+    {
+      "id": "holdtheline",
+      "name": "Hold the Line",
+      "tagline": "Team bluffing party game",
+      "description": "A team-vs-team bluffing party game built on live composure/tell reading. Keep your planted lies alive while the other team watches your tells. Play in one room or online from separate devices.",
+      "url": "./holdtheline/",
+      "repo": "https://github.com/JBERRY2347/holdtheline",
+      "icon": "./holdtheline/icon-192.png",
+      "category": "Games",
+      "tags": ["camera", "multiplayer", "on-device", "offline", "PWA"],
+      "platforms": ["web"],
+      "privacy": "./holdtheline/privacy.html",
+      "status": "live"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "App registry",
+  "type": "object",
+  "required": ["site", "apps"],
+  "properties": {
+    "site": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "tagline": { "type": "string" },
+        "owner": { "type": "string" },
+        "github": { "type": "string", "format": "uri" }
+      }
+    },
+    "apps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "tagline", "url"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "name": { "type": "string" },
+          "tagline": { "type": "string", "description": "One short line shown under the name." },
+          "description": { "type": "string" },
+          "url": { "type": "string", "description": "Where the app runs. Relative (./name/) for a project site on this domain, or absolute." },
+          "repo": { "type": "string", "format": "uri" },
+          "icon": { "type": "string", "description": "Square PNG, ideally 192px. Falls back to the app's initials." },
+          "category": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "platforms": { "type": "array", "items": { "enum": ["web", "android", "ios", "desktop"] } },
+          "android_package": { "type": "string" },
+          "privacy": { "type": "string" },
+          "status": { "enum": ["live", "beta", "wip", "archived"], "default": "live" }
+        }
+      }
+    }
+  }
+}
