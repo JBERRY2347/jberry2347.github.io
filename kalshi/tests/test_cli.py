@@ -18,7 +18,7 @@ def wired(monkeypatch, settings, fake_session):
     monkeypatch.setattr(KalshiClient, "__init__", init)
     fake_session.route("GET", "/portfolio/positions", {"market_positions": []})
     fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
-    fake_session.route("POST", "/portfolio/orders", {"order": {"order_id": "o1", "status": "resting"}})
+    fake_session.route("POST", "/portfolio/events/orders", {"order": {"order_id": "o1", "status": "resting"}})
     return fake_session
 
 
@@ -38,7 +38,7 @@ def test_dry_run_sends_nothing(wired, capsys):
 def test_buy_sends_signed_order(wired, capsys):
     assert cli.main(["-y", "buy", "T", "--side", "no", "--count", "2", "--price", "30"]) == 0
     post = [c for c in wired.calls if c["method"] == "POST"][0]
-    assert post["json"]["no_price"] == 30 and post["json"]["count"] == 2
+    assert post["json"]["side"] == "ask" and post["json"]["price"] == "0.7000" and post["json"]["count"] == "2.00"
     assert post["headers"]["KALSHI-ACCESS-SIGNATURE"]
     assert '"order_id": "o1"' in capsys.readouterr().out
 
@@ -54,4 +54,4 @@ def test_bot_once_places_from_plan(wired, tmp_path, capsys):
     plan.write_text('{"edge_cents": 5, "max_contracts": 3, "markets": {"T": {"yes_prob": 0.6}}}')
     assert cli.main(["-y", "bot", "--plan", str(plan), "--once"]) == 0
     post = [c for c in wired.calls if c["method"] == "POST"][0]
-    assert post["json"] == {**post["json"], "side": "yes", "yes_price": 50, "count": 3}
+    assert post["json"] == {**post["json"], "side": "bid", "price": "0.5000", "count": "3.00"}
