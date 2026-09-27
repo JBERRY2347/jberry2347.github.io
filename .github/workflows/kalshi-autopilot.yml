@@ -63,6 +63,9 @@ jobs:
             if [ "$key" != "$ANTHROPIC_API_KEY" ]; then
               echo "::warning::ANTHROPIC_API_KEY contained extra text around the key; using only the key. Please store just the key."
             fi
+            if [ "${#key}" -lt 60 ]; then
+              echo "::warning::ANTHROPIC_API_KEY is only ${#key} characters; a full key is ~100. It was probably copied from the shortened list view. Create a key and use 'Copy Key' in the pop-up."
+            fi
           fi
         id: gate
 
