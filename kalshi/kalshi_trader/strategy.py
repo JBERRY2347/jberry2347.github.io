@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .client import KalshiClient, OrderRequest
+from .fields import ceil_cents, orderbook_levels
 from .risk import current_position
 
 log = logging.getLogger("kalshi.strategy")
@@ -70,18 +71,20 @@ def load_plan(path: str | Path) -> list[MarketPlan]:
 
 
 def best_ask(orderbook: dict, side: str) -> int | None:
-    """Best price to BUY ``side`` right now, in cents, or None if no liquidity.
+    """Best price to BUY ``side`` right now, in whole cents, or None if no liquidity.
 
     Kalshi's order book lists resting bids for each side as [price, quantity].
     A resting NO bid at price p is an offer to sell YES at 100 - p, so the best
-    YES ask is 100 minus the highest NO bid, and vice versa.
+    YES ask is 100 minus the highest NO bid, and vice versa. Sub-cent prices are
+    rounded up so a limit order at the returned price still crosses the ask.
     """
     other = "no" if side == "yes" else "yes"
-    levels = orderbook.get(other) or []
+    levels = orderbook_levels(orderbook, other)
     if not levels:
         return None
-    highest_bid = max(int(level[0]) for level in levels)
-    return 100 - highest_bid
+    highest_bid = max(price for price, _ in levels)
+    ask = ceil_cents(100 - highest_bid)
+    return ask if 1 <= ask <= 99 else None
 
 
 def decide(plan: MarketPlan, orderbook: dict, position: int) -> OrderRequest | None:

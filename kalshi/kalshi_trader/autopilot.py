@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from .client import KalshiClient, OrderRequest
+from .fields import count, exposure_cents, funded_exchange_indexes, mid_cents, price_cents, spread_cents, volume
 from .research import Estimate, ResearchCache, ResearchFailed, Researcher, journal
 from .risk import current_position
 from .strategy import MarketPlan, best_ask, decide
@@ -69,27 +70,20 @@ def _parse_time(value) -> datetime | None:
         return None
 
 
-def _cents(m: dict, field: str) -> int | None:
-    """Read a price in cents, accepting Kalshi's integer-cent or `_dollars` string fields."""
-    v = m.get(field)
-    if v is None:
-        d = m.get(field + "_dollars")
-        if d is None:
-            return None
-        try:
-            return round(float(d) * 100)
-        except (TypeError, ValueError):
-            return None
-    try:
-        return int(v)
-    except (TypeError, ValueError):
-        return None
+def rejection_reason(m: dict, cfg: AutopilotSettings, now: datetime, shards: set[int] | None = None) -> str | None:
+    """Why this market is not a candidate, or None if it is one.
 
-
-def rejection_reason(m: dict, cfg: AutopilotSettings, now: datetime) -> str | None:
-    """Why this market is not a candidate, or None if it is one."""
+    ``shards`` is the set of exchange indexes that hold cash; a market on another
+    shard can't be paid for, so it is skipped.
+    """
     if m.get("status") not in (None, "open", "active"):
         return f"status={m.get('status')}"
+    if m.get("market_type") not in (None, "binary"):
+        return f"market_type={m.get('market_type')}"
+    if m.get("mve_selected_legs") or m.get("mve_collection_ticker"):
+        return "multi-leg parlay"
+    if shards is not None and m.get("exchange_index") is not None and int(m["exchange_index"]) not in shards:
+        return "no cash on that exchange shard"
     close = _parse_time(m.get("close_time"))
     if close is None:
         return "no close_time"
@@ -98,15 +92,15 @@ def rejection_reason(m: dict, cfg: AutopilotSettings, now: datetime) -> str | No
         return "closes too soon"
     if hours > cfg.max_days_to_close * 24:
         return "closes too far out"
-    if int(m.get("volume") or 0) < cfg.min_volume:
+    if volume(m) < cfg.min_volume:
         return "volume below min_volume"
-    yb, ya = _cents(m, "yes_bid"), _cents(m, "yes_ask")
-    if yb is None or ya is None:
+    spread = spread_cents(m)
+    if spread is None:
         return "no bid/ask"
-    if ya - yb > cfg.max_spread_cents:
+    if spread > cfg.max_spread_cents:
         return "spread too wide"
-    mid = (yb + ya) / 2
-    if mid < cfg.min_price_cents or mid > cfg.max_price_cents:
+    mid = mid_cents(m)
+    if mid is None or mid < cfg.min_price_cents or mid > cfg.max_price_cents:
         return "price outside band"
     series = str(m.get("series_ticker") or m.get("event_ticker") or m.get("ticker", "")).split("-")[0]
     if cfg.include_series and series not in cfg.include_series:
@@ -120,7 +114,7 @@ def rejection_reason(m: dict, cfg: AutopilotSettings, now: datetime) -> str | No
 
 
 def select_markets(markets: list[dict], cfg: AutopilotSettings, now: datetime | None = None,
-                   stats: dict[str, int] | None = None) -> list[dict]:
+                   stats: dict[str, int] | None = None, shards: set[int] | None = None) -> list[dict]:
     """Filter and rank candidate markets, highest volume first.
 
     If ``stats`` is given, it is filled with a count of rejection reasons.
@@ -128,28 +122,28 @@ def select_markets(markets: list[dict], cfg: AutopilotSettings, now: datetime | 
     now = now or datetime.now(timezone.utc)
     keep = []
     for m in markets:
-        reason = rejection_reason(m, cfg, now)
+        reason = rejection_reason(m, cfg, now, shards)
         if reason is None:
             keep.append(m)
         elif stats is not None:
             stats[reason] = stats.get(reason, 0) + 1
-    keep.sort(key=lambda m: int(m.get("volume") or 0), reverse=True)
+    keep.sort(key=volume, reverse=True)
     return keep
 
 
 def account_exposure_cents(positions: dict, resting_orders: list[dict]) -> int:
     """Cash at risk: open position exposure plus worst-case cost of resting orders."""
-    total = 0
+    total = 0.0
     for p in positions.get("market_positions", []):
-        total += abs(int(p.get("market_exposure") or 0))
+        total += exposure_cents(p)
     for o in resting_orders:
-        price = o.get("yes_price") if o.get("side") == "yes" else o.get("no_price")
-        count = int(o.get("remaining_count") or o.get("count") or 0)
+        price = price_cents(o, "yes_price" if o.get("side") == "yes" else "no_price")
+        n = count(o, "remaining_count") or count(o, "count")
         if price is None:
             continue
-        per = int(price) if o.get("action") == "buy" else 100 - int(price)
-        total += per * count
-    return total
+        per = price if o.get("action") == "buy" else 100 - price
+        total += per * n
+    return int(round(total))
 
 
 def estimate_to_plan(est: Estimate, cfg: AutopilotSettings) -> MarketPlan | None:
@@ -209,17 +203,20 @@ class Autopilot:
     def run_once(self, place) -> list[dict]:
         """One full pass. ``place(order)`` submits through the Trader's risk rails."""
         balance = self.client.balance()   # first: proves the API key signs correctly
-        log.info("account ok: cash $%.2f", int(balance.get("balance") or 0) / 100)
+        shards = funded_exchange_indexes(balance)
+        log.info("account ok: cash $%.2f%s", int(balance.get("balance") or 0) / 100,
+                 f", funded exchange shards {sorted(shards)}" if shards is not None else "")
 
         markets = self.client.markets(status="open", limit=1000, max_pages=5)
         stats: dict[str, int] = {}
-        candidates = select_markets(markets, self.cfg, stats=stats)
+        candidates = select_markets(markets, self.cfg, stats=stats, shards=shards)
         log.info("%d open markets, %d candidates after filters", len(markets), len(candidates))
+        top = sorted(markets, key=volume, reverse=True)[:5]
+        log.info("highest-volume open markets: %s", "; ".join(f"{m.get('ticker')} vol={volume(m):.0f} mid={mid_cents(m)}" for m in top))
         if not candidates:
             log.warning("rejection reasons: %s", ", ".join(f"{k}: {v}" for k, v in sorted(stats.items(), key=lambda kv: -kv[1])))
-            if markets:
-                sample = max(markets, key=lambda m: int(m.get("volume") or 0))
-                log.warning("highest-volume market as returned by the API: %s", json.dumps(sample, default=str)[:1500])
+            if top:
+                log.warning("highest-volume market as returned by the API: %s", json.dumps(top[0], default=str)[:1500])
             return []
 
         estimates = self.gather_estimates(candidates)

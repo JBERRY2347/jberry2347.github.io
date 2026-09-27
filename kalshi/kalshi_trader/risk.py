@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .client import KalshiClient, OrderRequest
 from .config import RiskLimits
+from .fields import position_contracts
 
 
 class RiskViolation(Exception):
@@ -51,7 +52,7 @@ def current_position(positions: dict, ticker: str) -> int:
     """Net contracts held in a market: positive = long yes, negative = long no."""
     for p in positions.get("market_positions", []):
         if p.get("ticker") == ticker:
-            return int(p.get("position", 0))
+            return position_contracts(p)
     return 0
 
 
