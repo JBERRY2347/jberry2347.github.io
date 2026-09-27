@@ -53,6 +53,17 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
           echo "KALSHI_ENV=$(printf '%s' "$KALSHI_ENV" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          # Accept a whole pasted curl snippet: keep only the sk-ant-... token, and mask it.
+          key=$(printf '%s' "$ANTHROPIC_API_KEY" | grep -o 'sk-ant-[A-Za-z0-9_-]*' | head -n1 || true)
+          if [ -z "$key" ]; then
+            echo "::warning::ANTHROPIC_API_KEY does not contain an sk-ant-... key; research will fail."
+          else
+            echo "::add-mask::$key"
+            echo "ANTHROPIC_API_KEY=$key" >> "$GITHUB_ENV"
+            if [ "$key" != "$ANTHROPIC_API_KEY" ]; then
+              echo "::warning::ANTHROPIC_API_KEY contained extra text around the key; using only the key. Please store just the key."
+            fi
+          fi
         id: gate
 
       - uses: actions/checkout@v4

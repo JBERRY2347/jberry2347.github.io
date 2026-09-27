@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -65,11 +66,25 @@ class AutopilotSettings:
         return cls(**merged)
 
 
+_SECRET_PATTERNS = [
+    re.compile(r"sk-ant-[A-Za-z0-9_-]+"),                       # Anthropic API keys
+    re.compile(r"(?i)(x-api-key|authorization)\s*[:=]\s*\S+"),  # header values
+    re.compile(r"-----BEGIN[^-]*-----.*?-----END[^-]*-----", re.S),  # PEM blocks
+]
+
+
+def redact(text: str) -> str:
+    """Strip anything that looks like a credential before it reaches a log or journal."""
+    for pat in _SECRET_PATTERNS:
+        text = pat.sub("[redacted]", text)
+    return text
+
+
 def _error_chain(exc: BaseException) -> str:
     """'OuterError: msg <- CauseError: msg', so connection errors say what actually failed."""
     parts, cur = [], exc
     while cur is not None and len(parts) < 6:
-        parts.append(f"{type(cur).__name__}: {str(cur)[:200]}")
+        parts.append(f"{type(cur).__name__}: {redact(str(cur))[:200]}")
         cur = cur.__cause__ or cur.__context__
     return " <- ".join(parts)
 

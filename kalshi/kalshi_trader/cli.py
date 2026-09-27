@@ -281,16 +281,16 @@ def cmd_doctor(t: Trader, args):
         import anthropic
         if not os.environ.get("ANTHROPIC_API_KEY"):
             raise SystemExit("ANTHROPIC_API_KEY is not set")
+        from .autopilot import _error_chain
+        key = os.environ["ANTHROPIC_API_KEY"]
+        if not key.startswith("sk-ant-") or any(ch.isspace() for ch in key):
+            raise SystemExit("ANTHROPIC_API_KEY should be just the key: one line starting with sk-ant-")
         client = anthropic.Anthropic(max_retries=0)
         model = t.settings.autopilot.get("model", "claude-opus-5")
         try:
             info = client.models.retrieve(model)
         except Exception as exc:
-            chain, cause = [], exc
-            while cause is not None and len(chain) < 6:
-                chain.append(f"{type(cause).__name__}: {str(cause)[:200]}")
-                cause = cause.__cause__ or cause.__context__
-            raise RuntimeError(" <- ".join(chain)) from None
+            raise RuntimeError(_error_chain(exc)) from None
         return {"model": info.id, "display_name": getattr(info, "display_name", None), "sdk": anthropic.__version__}
 
     checks.append(("anthropic api (authenticated)", anthropic_check))
@@ -310,8 +310,9 @@ def cmd_doctor(t: Trader, args):
             failures += 1
             print(f"FAIL  {label}: {exc}")
         except Exception as exc:  # network errors, timeouts
+            from .autopilot import redact
             failures += 1
-            print(f"FAIL  {label}: {type(exc).__name__}: {str(exc)[:300]}")
+            print(f"FAIL  {label}: {type(exc).__name__}: {redact(str(exc))[:300]}")
     print("all checks passed" if not failures else f"{failures} check(s) failed")
     return failures
 
