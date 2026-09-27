@@ -25,6 +25,7 @@ installable as a PWA and works offline once visited.
 | `404.html` | Fallback for bad URLs under the root. |
 | `.well-known/assetlinks.json` | Digital Asset Links for the CueSight Android app (TWA). Keep this. |
 | `.nojekyll` | Tells Pages to serve files as-is (no Jekyll). |
+| `kalshi/` | Not part of the site. A Python command line tool for trading on Kalshi; see [`kalshi/README.md`](kalshi/README.md). |
 
 ## Adding an app
 

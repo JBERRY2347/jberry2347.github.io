@@ -1,0 +1,16 @@
+# Copy to ~/.config/kalshi-trader/config.toml (or pass --config path).
+# Environment variables KALSHI_ENV, KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY override these.
+
+env = "demo"            # "demo" or "prod". Production also needs --live on every trading command.
+
+[auth]
+api_key_id = "00000000-0000-0000-0000-000000000000"
+private_key = "~/.config/kalshi-trader/kalshi.pem"
+
+[risk]                  # cents; 0 disables a cap
+max_order_cost_cents = 2000       # $20 worst case per order
+max_position_contracts = 100      # per market
+max_open_orders = 20
+max_daily_spend_cents = 10000     # $100 of new exposure per UTC day
+min_price_cents = 2
+max_price_cents = 98
