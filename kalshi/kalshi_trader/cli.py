@@ -76,7 +76,7 @@ class Trader:
                 log.warning("%s\n  --force given, sending anyway", msg)
             else:
                 log.error(msg)
-                if not getattr(self.args, "plan", None):
+                if self.args.command in ("buy", "sell"):
                     raise RiskViolation(msg)
                 return None
         if self.args.dry_run:
@@ -220,6 +220,74 @@ def cmd_bot(t: Trader, args):
             return
 
 
+def cmd_autopilot(t: Trader, args):
+    from .autopilot import Autopilot, AutopilotSettings
+    from .research import ResearchCache
+
+    t.guard_live()
+    cfg = AutopilotSettings.from_mapping(t.settings.autopilot)
+    if args.max_research is not None:
+        cfg.max_research_per_pass = args.max_research
+    if not args.dry_run and not args.yes and sys.stdin.isatty():
+        answer = input(f"[{'LIVE' if t.settings.is_live else 'demo'}] autopilot will research up to {cfg.max_research_per_pass} "
+                       f"markets per pass and place orders without asking. Continue? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            return
+        args.yes = True
+    cache = ResearchCache(t.settings.research_cache_path, cfg.research_ttl_hours)
+    pilot = Autopilot(t.client, cfg, cache, t.settings.journal_path, dry_run=args.dry_run)
+    log.info("autopilot on %s: edge %dc, max %d contracts/market, exposure cap $%.2f, model %s, journal %s",
+             t.settings.env, cfg.edge_cents, cfg.max_contracts, cfg.max_total_exposure_cents / 100, cfg.model, t.settings.journal_path)
+    while True:
+        try:
+            placed = pilot.run_once(t.place)
+            log.info("pass complete: %d order(s) placed", len(placed))
+        except KalshiError as exc:
+            log.error("API error: %s", exc)
+        except Exception:
+            log.exception("unexpected error during pass")
+        if args.once:
+            return
+        try:
+            time.sleep(args.interval)
+        except KeyboardInterrupt:
+            log.info("stopping")
+            return
+
+
+def cmd_review(t: Trader, args):
+    """Score past estimates against markets that have since settled."""
+    from .research import ResearchCache
+
+    cache = ResearchCache(t.settings.research_cache_path, ttl_hours=1e9)
+    estimates = cache.all()
+    if not estimates:
+        print("no estimates recorded yet")
+        return
+    rows, brier_model, brier_market, n = [], 0.0, 0.0, 0
+    for est in estimates:
+        try:
+            m = t.client.market(est.ticker)
+        except KalshiError:
+            continue
+        result = m.get("result")
+        if result not in ("yes", "no"):
+            continue
+        outcome = 1.0 if result == "yes" else 0.0
+        brier_model += (est.yes_prob - outcome) ** 2
+        if est.market_yes_price is not None:
+            brier_market += (est.market_yes_price / 100 - outcome) ** 2
+        n += 1
+        rows.append([est.ticker, f"{est.yes_prob:.2f}", f"{(est.market_yes_price or 0)/100:.2f}", result, est.confidence])
+    if not n:
+        print(f"{len(estimates)} estimates, none settled yet")
+        return
+    summary = {"settled": n, "brier_model": round(brier_model / n, 4), "brier_market": round(brier_market / n, 4)}
+    text = _table(rows, ["ticker", "estimate", "market", "result", "confidence"])
+    text += f"\n\nsettled: {n}   Brier score (lower is better): model {summary['brier_model']:.4f}   market {summary['brier_market']:.4f}"
+    _out(args, {"rows": rows, **summary}, text)
+
+
 # ------------------------------------------------------------------ parser
 
 def build_parser() -> argparse.ArgumentParser:
@@ -284,6 +352,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--interval", type=int, default=60, help="seconds between passes")
     s.add_argument("--once", action="store_true", help="run a single pass and exit")
     s.set_defaults(func=cmd_bot)
+
+    s = sub.add_parser("autopilot", help="research markets with Claude and trade the edge automatically")
+    s.add_argument("--interval", type=int, default=3600, help="seconds between passes (default: 1 hour)")
+    s.add_argument("--once", action="store_true", help="run a single pass and exit")
+    s.add_argument("--max-research", type=int, help="override autopilot.max_research_per_pass")
+    s.set_defaults(func=cmd_autopilot)
+
+    s = sub.add_parser("review", help="score past autopilot estimates against settled markets")
+    s.set_defaults(func=cmd_review)
 
     return p
 

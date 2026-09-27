@@ -14,3 +14,28 @@ max_open_orders = 20
 max_daily_spend_cents = 10000     # $100 of new exposure per UTC day
 min_price_cents = 2
 max_price_cents = 98
+
+[autopilot]             # used by `python -m kalshi_trader autopilot`; needs ANTHROPIC_API_KEY
+# which markets to consider
+min_volume = 500                  # contracts traded so far
+max_spread_cents = 10             # skip illiquid books
+min_hours_to_close = 6            # skip markets about to resolve
+max_days_to_close = 21            # skip far-future markets
+min_price_cents = 5               # skip near-certain markets
+max_price_cents = 95
+include_series = []               # e.g. ["KXHIGHNY", "KXNFLGAME"]; empty = everything
+exclude_series = []
+exclude_keywords = []             # skip titles containing any of these words
+
+# research (each researched market costs roughly $0.10 to $0.50 in Claude usage)
+model = "claude-opus-5"
+max_research_per_pass = 5
+max_searches_per_market = 8
+research_ttl_hours = 12           # re-research a market after this long
+min_confidence = "medium"         # "low", "medium" or "high"
+
+# trading
+edge_cents = 10                   # only buy when the estimate beats the ask by this much
+max_contracts = 10                # per market
+max_total_exposure_cents = 20000  # $200 across all positions and resting orders
+min_balance_cents = 5000          # stop buying below $50 cash

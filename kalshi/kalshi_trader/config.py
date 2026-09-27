@@ -9,6 +9,8 @@ Environment variables:
     KALSHI_API_KEY_ID       API key id from the Kalshi settings page
     KALSHI_PRIVATE_KEY      path to the PEM private key file
     KALSHI_CONFIG           path to a TOML config file (default ~/.config/kalshi-trader/config.toml)
+    KALSHI_STATE            path of the state file; the research cache and journal live beside it
+    ANTHROPIC_API_KEY       needed by the autopilot's research step (read by the Anthropic SDK)
 """
 
 from __future__ import annotations
@@ -54,6 +56,19 @@ class Settings:
     private_key_path: str | None = None
     risk: RiskLimits = field(default_factory=RiskLimits)
     state_path: Path = DEFAULT_STATE_PATH
+    autopilot: dict = field(default_factory=dict)   # raw [autopilot] table; parsed by autopilot.AutopilotSettings
+
+    @property
+    def state_dir(self) -> Path:
+        return self.state_path.parent
+
+    @property
+    def research_cache_path(self) -> Path:
+        return self.state_dir / f"research-{self.env}.json"
+
+    @property
+    def journal_path(self) -> Path:
+        return self.state_dir / f"journal-{self.env}.jsonl"
 
     @property
     def host(self) -> str:
@@ -92,7 +107,8 @@ def load_settings(config_path: str | Path | None = None, env_override: str | Non
         api_key_id=os.environ.get("KALSHI_API_KEY_ID") or auth.get("api_key_id"),
         private_key_path=os.environ.get("KALSHI_PRIVATE_KEY") or auth.get("private_key"),
         risk=RiskLimits.from_mapping(file_cfg.get("risk", {})),
-        state_path=Path(file_cfg.get("state_path", DEFAULT_STATE_PATH)).expanduser(),
+        state_path=Path(os.environ.get("KALSHI_STATE") or file_cfg.get("state_path", DEFAULT_STATE_PATH)).expanduser(),
+        autopilot=dict(file_cfg.get("autopilot", {})),
     )
     settings.host  # validate env early
     return settings

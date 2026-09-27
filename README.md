@@ -26,6 +26,7 @@ installable as a PWA and works offline once visited.
 | `.well-known/assetlinks.json` | Digital Asset Links for the CueSight Android app (TWA). Keep this. |
 | `.nojekyll` | Tells Pages to serve files as-is (no Jekyll). |
 | `kalshi/` | Not part of the site. A Python command line tool for trading on Kalshi; see [`kalshi/README.md`](kalshi/README.md). |
+| `.github/workflows/kalshi-autopilot.yml` | Scheduled run of the Kalshi autopilot. Off until the `KALSHI_AUTOPILOT_ENABLED` variable is set. |
 
 ## Adding an app
 

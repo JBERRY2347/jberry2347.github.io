@@ -3,11 +3,14 @@
 A small command line tool that places and manages trades on [Kalshi](https://kalshi.com)
 through their public trade API. It talks to the **demo exchange by default**, refuses to
 touch real money unless you say `--live`, and runs every order through client-side risk
-caps you control. It also includes a simple bot that buys contracts when the market price
-is cheaper than the probability you assign, so it can trade for you unattended.
+caps you control. It includes two ways to trade unattended:
 
-It is deliberately boring: no predictions, no leverage, no cleverness. You decide what
-things are worth; the tool executes and keeps you inside the limits you set.
+* **bot**: buys contracts when the market price is cheaper than a probability *you* wrote
+  down in a plan file.
+* **autopilot**: picks liquid markets, has Claude research each one with web search and
+  estimate the probability, and trades when that estimate beats the market by a margin.
+
+Execution is deliberately boring: limit orders only, no leverage, hard caps on every axis.
 
 > Kalshi contracts are real money bets. Anything the bot buys can go to zero. Start on the
 > demo exchange, keep the risk caps low, and treat the plan file as your opinion, not the tool's.
@@ -125,6 +128,69 @@ editing. Stop it with Ctrl-C, then `cancel --all` if you want to pull resting or
 
 To keep it running on a server, wrap the `bot` command in `tmux`, `systemd`, or `nohup`.
 
+## Letting it do the research too: autopilot
+
+If you don't want to pick the numbers yourself, `autopilot` does the whole loop:
+
+1. **Selects markets.** Pulls every open market and keeps the liquid ones (volume, spread)
+   that close between 6 hours and a few weeks from now and aren't priced near 0 or 100.
+   You can restrict it to certain series or exclude topics in the `[autopilot]` config.
+2. **Researches them with Claude.** For each candidate (up to `max_research_per_pass` per
+   pass, highest volume first), Claude Opus reads the market rules, searches the web for
+   current primary sources, and writes a forecast. A second call extracts a probability, a
+   confidence level, the reasoning and the sources into a strict JSON schema. Estimates are
+   cached for `research_ttl_hours` so the same market isn't re-researched every pass.
+3. **Trades the edge.** Every estimate with at least `min_confidence` becomes a plan entry
+   and goes through exactly the same fair-value logic and risk caps as the manual bot. Two
+   extra account-level caps apply: `max_total_exposure_cents` across all positions and
+   resting orders, and `min_balance_cents`, a cash floor.
+4. **Journals everything.** Every estimate, skipped market, and order is appended to
+   `journal-<env>.jsonl` next to the state file, so you can see exactly why it did what it did.
+
+```bash
+pip install -r requirements.txt            # includes the anthropic SDK
+export ANTHROPIC_API_KEY=sk-ant-...        # from console.anthropic.com
+
+python -m kalshi_trader autopilot --once --dry-run      # research + log, no orders
+python -m kalshi_trader autopilot -y                    # demo, one pass an hour
+python -m kalshi_trader --env prod --live autopilot -y  # real money
+python -m kalshi_trader review                          # score past estimates once markets settle
+```
+
+`review` compares each recorded estimate with the settled result and prints a Brier score
+for the model next to the Brier score the market price would have had at the same moment.
+If the model's score isn't lower than the market's after a few dozen settled markets, the
+autopilot has no edge and you should stop running it. Run it on demo long enough to see
+that number before switching to prod.
+
+**Cost.** Each researched market is one Claude Opus call with up to `max_searches_per_market`
+web searches plus a small extraction call, roughly $0.10 to $0.50. With the default 5 markets
+per pass and a 12 hour cache, expect a few dollars a day.
+
+**What the prompt asks for.** Claude is told to treat the current market price as a strong
+prior, to only diverge when it found specific evidence, and to say when it couldn't find
+enough information, in which case the market is skipped. It is not asked to be clever.
+
+### Running it on a schedule with GitHub Actions
+
+`.github/workflows/kalshi-autopilot.yml` runs one autopilot pass every 4 hours using the
+settings in `kalshi/autopilot.config.toml`, so it trades without your computer being on.
+It is off until you opt in. In the repo go to **Settings → Secrets and variables → Actions**:
+
+| Kind | Name | Value |
+|---|---|---|
+| Variable | `KALSHI_AUTOPILOT_ENABLED` | `true` |
+| Variable | `KALSHI_ENV` | `demo` to start, `prod` when you trust it |
+| Secret | `KALSHI_API_KEY_ID` | key id from Kalshi's API Keys page (demo or prod to match `KALSHI_ENV`) |
+| Secret | `KALSHI_PRIVATE_KEY_PEM` | the full contents of the `.pem` file |
+| Secret | `ANTHROPIC_API_KEY` | from console.anthropic.com |
+
+Then run it once by hand from the **Actions** tab (**Kalshi autopilot → Run workflow**,
+optionally ticking dry run) and read the log. The research cache and journal are carried
+between runs with the Actions cache, and each run uploads the journal as an artifact. Edit
+`autopilot.config.toml` to tune it; set `KALSHI_AUTOPILOT_ENABLED` to anything but `true` to
+pause it.
+
 ## Layout
 
 ```
@@ -135,9 +201,12 @@ kalshi/
 │   ├── config.py      env/TOML settings and RiskLimits
 │   ├── risk.py        pre-trade checks and the daily spend ledger
 │   ├── strategy.py    fair-value plan loader and decision logic
+│   ├── research.py    Claude + web search -> probability estimate, cache, journal
+│   ├── autopilot.py   market selection, exposure caps, the research-then-trade pass
 │   └── cli.py         argparse commands
-├── tests/             pytest suite (signing, client, risk, strategy, CLI)
+├── tests/             pytest suite (signing, client, risk, strategy, research, autopilot, CLI)
 ├── config.example.toml
+├── autopilot.config.toml   settings used by the scheduled GitHub Actions run
 ├── plan.example.json
 └── requirements.txt
 ```
