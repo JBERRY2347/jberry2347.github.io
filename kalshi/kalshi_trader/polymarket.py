@@ -108,11 +108,13 @@ class PolymarketClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def active_markets(self, max_pages: int = 10, page_size: int = 500) -> list[PolyMarket]:
+    def active_markets(self, max_pages: int = 30, page_size: int = 100) -> list[PolyMarket]:
+        """Open markets, busiest first. Gamma serves at most 100 per page whatever ``limit`` says."""
         out: list[PolyMarket] = []
         for page in range(max_pages):
-            resp = self.session.get(f"{self.base_url}/markets", params={"closed": "false", "active": "true", "limit": page_size,
-                                                                        "offset": page * page_size}, timeout=self.timeout)
+            resp = self.session.get(f"{self.base_url}/markets",
+                                    params={"closed": "false", "active": "true", "order": "volumeNum", "ascending": "false",
+                                            "limit": page_size, "offset": page * page_size}, timeout=self.timeout)
             if resp.status_code != 200:
                 log.warning("polymarket: HTTP %s on page %d; using %d markets fetched so far", resp.status_code, page, len(out))
                 break
