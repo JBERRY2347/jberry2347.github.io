@@ -160,7 +160,7 @@ class Researcher:
     def _research_text(self, market: dict, extra_context: list[str] | None = None) -> tuple[str, int, int, int]:
         tools = [
             {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches},
-            {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": min(self.max_searches, 4), "max_content_tokens": 6000},
+            {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": min(self.max_searches, 3), "max_content_tokens": 4000},
         ]
         messages: list[dict] = [{"role": "user", "content": "Research this Kalshi market and estimate the probability of YES.\n\n" + describe_market(market, extra_context)}]
         in_tok = out_tok = searches = 0
@@ -217,15 +217,34 @@ class Researcher:
 # ------------------------------------------------------------------- cache
 
 class ResearchCache:
-    """Estimates keyed by ticker, persisted as JSON, with a time-to-live."""
+    """Estimates keyed by ticker, persisted as JSON, with a time-to-live.
+
+    Research spend is kept in its own per-day ledger so that dropping a stale
+    estimate does not make today's budget look less used than it was.
+    """
 
     def __init__(self, path: Path, ttl_hours: float):
         self.path = path
         self.ttl = ttl_hours * 3600
+        self._data: dict[str, dict] = {}
+        self._spend: dict[str, float] = {}
         try:
-            self._data: dict[str, dict] = json.loads(path.read_text())
+            raw = json.loads(path.read_text())
         except (FileNotFoundError, ValueError):
-            self._data = {}
+            raw = {}
+        if isinstance(raw, dict) and "estimates" in raw:
+            self._data = dict(raw.get("estimates") or {})
+            self._spend = {k: float(v) for k, v in (raw.get("spend") or {}).items()}
+        elif isinstance(raw, dict):                      # legacy flat file: rebuild the ledger from the estimates
+            self._data = raw
+            for d in raw.values():
+                day = str(d.get("researched_at", ""))[:10]
+                if day:
+                    self._spend[day] = self._spend.get(day, 0.0) + float(d.get("cost_usd") or 0)
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps({"estimates": self._data, "spend": self._spend}, indent=2))
 
     def get(self, ticker: str) -> Estimate | None:
         d = self._data.get(ticker)
@@ -240,22 +259,22 @@ class ResearchCache:
     def put(self, est: Estimate) -> None:
         if not est.researched_at:
             est.researched_at = _now_iso()
+        day = est.researched_at[:10]
+        self._spend[day] = round(self._spend.get(day, 0.0) + float(est.cost_usd or 0), 4)
         self._data[est.ticker] = est.to_dict()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._data, indent=2))
+        self._save()
 
     def all(self) -> list[Estimate]:
         return [Estimate.from_dict(d) for d in self._data.values()]
 
     def drop(self, ticker: str) -> None:
         if self._data.pop(ticker, None) is not None:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(self._data, indent=2))
+            self._save()
 
     def spent_today_usd(self) -> float:
-        """Estimated research spend on estimates made today (UTC). Failed calls are not counted."""
+        """Estimated research spend today (UTC), including estimates since dropped as stale."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        return sum(float(d.get("cost_usd") or 0) for d in self._data.values() if str(d.get("researched_at", "")).startswith(today))
+        return self._spend.get(today, 0.0)
 
 
 def journal(path: Path, record: dict) -> None:
