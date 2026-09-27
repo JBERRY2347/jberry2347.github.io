@@ -78,6 +78,21 @@ class KalshiClient:
         self.timeout = timeout
         self._key_id = settings.api_key_id
         self._key = load_private_key(settings.private_key_path) if settings.private_key_path else None
+        self.last_response = None
+
+    @property
+    def key_type(self) -> str | None:
+        from .auth import key_type
+        return key_type(self._key) if self._key else None
+
+    @property
+    def key_id_hint(self) -> str:
+        """First characters of the key id, enough to tell keys apart in a log."""
+        return (self._key_id or "")[:8] + "…" if self._key_id else "(none)"
+
+    def api_keys(self) -> list[dict]:
+        """List the API keys on the account (an authenticated, read-only call)."""
+        return self._request("GET", "/api_keys").get("api_keys", [])
 
     # ------------------------------------------------------------------ core
 
@@ -90,10 +105,11 @@ class KalshiClient:
             headers.update(auth_headers(self._key_id, self._key, method, path))
         for attempt in range(3):
             resp = self.session.request(method, url, params=params, json=json, headers=headers, timeout=self.timeout)
-            if resp.status_code == 429 and attempt < 2:
-                time.sleep(0.5 * (attempt + 1))
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < 2 and method == "GET":
+                time.sleep(1.0 * (attempt + 1))
                 continue
             break
+        self.last_response = resp
         if resp.status_code >= 400:
             try:
                 body = resp.json()

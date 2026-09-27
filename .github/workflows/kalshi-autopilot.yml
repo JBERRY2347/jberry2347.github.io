@@ -86,6 +86,12 @@ jobs:
         env:
           PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
 
+      - name: Connectivity and authentication check
+        if: steps.gate.outputs.enabled == 'true'
+        continue-on-error: true
+        working-directory: kalshi
+        run: python -m kalshi_trader doctor
+
       - name: Run one autopilot pass
         if: steps.gate.outputs.enabled == 'true'
         working-directory: kalshi
