@@ -124,3 +124,12 @@ def test_select_markets_reports_reasons_and_reads_dollar_prices():
     kept = select_markets(ms, cfg, now=NOW, stats=stats)
     assert [m["ticker"] for m in kept] == ["C-1"]
     assert stats == {"volume below min_volume": 1, "closes too soon": 1}
+
+
+def test_env_overrides_apply_only_to_that_env():
+    raw = {"min_volume": 1000, "edge_cents": 10, "demo": {"min_volume": 20}, "prod": {"edge_cents": 12}}
+    assert AutopilotSettings.from_mapping(raw, env="demo").min_volume == 20
+    assert AutopilotSettings.from_mapping(raw, env="demo").edge_cents == 10
+    assert AutopilotSettings.from_mapping(raw, env="prod").min_volume == 1000
+    assert AutopilotSettings.from_mapping(raw, env="prod").edge_cents == 12
+    assert AutopilotSettings.from_mapping(raw).min_volume == 1000

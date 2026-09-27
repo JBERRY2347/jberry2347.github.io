@@ -57,8 +57,12 @@ class AutopilotSettings:
     min_balance_cents: int = 5_000           # stop buying below $50 cash
 
     @classmethod
-    def from_mapping(cls, m: dict) -> "AutopilotSettings":
-        return cls(**{k: v for k, v in m.items() if k in cls.__dataclass_fields__})
+    def from_mapping(cls, m: dict, env: str | None = None) -> "AutopilotSettings":
+        """Build settings from the ``[autopilot]`` table, then apply ``[autopilot.<env>]`` overrides."""
+        merged = {k: v for k, v in m.items() if k in cls.__dataclass_fields__}
+        if env and isinstance(m.get(env), dict):
+            merged.update({k: v for k, v in m[env].items() if k in cls.__dataclass_fields__})
+        return cls(**merged)
 
 
 def _parse_time(value) -> datetime | None:
@@ -207,7 +211,7 @@ class Autopilot:
         log.info("account ok: cash $%.2f%s", int(balance.get("balance") or 0) / 100,
                  f", funded exchange shards {sorted(shards)}" if shards is not None else "")
 
-        markets = self.client.markets(status="open", limit=1000, max_pages=5)
+        markets = self.client.markets(status="open", limit=1000, max_pages=10)
         stats: dict[str, int] = {}
         candidates = select_markets(markets, self.cfg, stats=stats, shards=shards)
         log.info("%d open markets, %d candidates after filters", len(markets), len(candidates))

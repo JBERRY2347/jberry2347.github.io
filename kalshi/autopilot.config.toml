@@ -32,3 +32,10 @@ edge_cents = 10
 max_contracts = 10
 max_total_exposure_cents = 10000  # $100 total at risk
 min_balance_cents = 2500          # stop buying below $25 cash
+
+[autopilot.demo]                  # overrides applied only when KALSHI_ENV=demo
+# The demo exchange is thinly traded (a busy market has ~200 contracts of volume and
+# wide spreads), so loosen the liquidity filters there. These never apply to prod.
+min_volume = 20
+max_spread_cents = 30
+max_research_per_pass = 3

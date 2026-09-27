@@ -39,3 +39,7 @@ edge_cents = 10                   # only buy when the estimate beats the ask by 
 max_contracts = 10                # per market
 max_total_exposure_cents = 20000  # $200 across all positions and resting orders
 min_balance_cents = 5000          # stop buying below $50 cash
+
+[autopilot.demo]                  # any [autopilot] key here overrides the above when env = "demo"
+min_volume = 20
+max_spread_cents = 30
