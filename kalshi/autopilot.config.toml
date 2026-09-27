@@ -41,3 +41,7 @@ min_balance_cents = 2500          # stop buying below $25 cash
 min_volume = 20
 max_spread_cents = 30
 max_research_per_pass = 2
+# Play money: trade small edges so the order path gets exercised and fills can be inspected.
+# Demo P&L therefore says little about real performance; judge the Brier score instead.
+edge_cents = 3
+min_balance_cents = 500           # use nearly the whole $100 demo balance
