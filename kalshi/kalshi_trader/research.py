@@ -103,7 +103,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def describe_market(market: dict) -> str:
+def describe_market(market: dict, extra_context: list[str] | None = None) -> str:
     """Render the market fields Claude needs into a compact prompt block."""
     lines = [f"Ticker: {market.get('ticker')}", f"Title: {market.get('title')}"]
     for key, label in (("yes_sub_title", "YES means"), ("subtitle", "Subtitle"), ("rules_primary", "Rules"),
@@ -116,6 +116,8 @@ def describe_market(market: dict) -> str:
         last = price_cents(market, "last_price")
         lines.append(f"Current YES market: bid {_fmt(yb)}c / ask {_fmt(ya)}c (last trade {_fmt(last)}c, volume {volume(market):.0f} contracts)")
     lines.append(f"Now (UTC): {_now_iso()}")
+    for ctx in extra_context or []:
+        lines.append(f"Context: {ctx}")
     return "\n".join(lines)
 
 
@@ -155,12 +157,12 @@ class Researcher:
         stu = getattr(getattr(resp, "usage", None), "server_tool_use", None)
         return int(getattr(stu, "web_search_requests", 0) or 0) + int(getattr(stu, "web_fetch_requests", 0) or 0)
 
-    def _research_text(self, market: dict) -> tuple[str, int, int, int]:
+    def _research_text(self, market: dict, extra_context: list[str] | None = None) -> tuple[str, int, int, int]:
         tools = [
             {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches},
             {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": min(self.max_searches, 4), "max_content_tokens": 6000},
         ]
-        messages: list[dict] = [{"role": "user", "content": "Research this Kalshi market and estimate the probability of YES.\n\n" + describe_market(market)}]
+        messages: list[dict] = [{"role": "user", "content": "Research this Kalshi market and estimate the probability of YES.\n\n" + describe_market(market, extra_context)}]
         in_tok = out_tok = searches = 0
         for _ in range(6):  # pause_turn continuations
             resp = self.client.messages.create(
@@ -197,8 +199,8 @@ class Researcher:
         text = next(b.text for b in resp.content if getattr(b, "type", "") == "text")
         return json.loads(text), getattr(resp.usage, "input_tokens", 0) or 0, getattr(resp.usage, "output_tokens", 0) or 0
 
-    def estimate(self, market: dict) -> Estimate:
-        text, i1, o1, searches = self._research_text(market)
+    def estimate(self, market: dict, extra_context: list[str] | None = None) -> Estimate:
+        text, i1, o1, searches = self._research_text(market, extra_context)
         if not text.strip():
             raise ResearchFailed("empty research response")
         data, i2, o2 = self._extract(market, text)

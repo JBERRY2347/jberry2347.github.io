@@ -1,4 +1,6 @@
 import json
+
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from kalshi_trader.autopilot import Autopilot, AutopilotSettings, account_exposure_cents, estimate_to_plan, select_markets
@@ -50,13 +52,20 @@ def test_estimate_to_plan_gates():
     assert estimate_to_plan(Estimate("T", 0.999, "high", True, "", "r"), cfg) is None
 
 
+@pytest.fixture(autouse=True)
+def no_polymarket_network(monkeypatch):
+    """Tests never reach gamma-api.polymarket.com; the comparison has its own tests below."""
+    monkeypatch.setattr("kalshi_trader.autopilot.PolymarketClient.active_markets", lambda self, **kw: [])
+
+
 class ScriptedResearcher:
     def __init__(self, results):
         self.results = results
         self.asked = []
 
-    def estimate(self, m):
+    def estimate(self, m, extra_context=None):
         self.asked.append(m["ticker"])
+        self.context = extra_context
         r = self.results[m["ticker"]]
         if isinstance(r, Exception):
             raise r

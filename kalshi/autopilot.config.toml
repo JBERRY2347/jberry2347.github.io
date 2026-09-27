@@ -31,6 +31,11 @@ research_ttl_hours = 12
 min_confidence = "medium"
 max_price_drift_cents = 15        # if the market moved further than this since research, the estimate is stale
 
+# cross-exchange signal: compare each candidate with the closest Polymarket question (read-only, no login)
+polymarket_enabled = true
+min_cross_exchange_gap_cents = 8  # research markets where the two exchanges disagree by this much first
+min_cross_match_similarity = 0.5  # wording similarity needed to treat two questions as the same event
+
 edge_cents = 10
 max_contracts = 10
 max_total_exposure_cents = 10000  # $100 total at risk

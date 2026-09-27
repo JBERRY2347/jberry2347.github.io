@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 from .client import KalshiClient, KalshiError, OrderRequest
 from .fields import count, exposure_cents, funded_exchange_indexes, mid_cents, price_cents, spread_cents, volume
+from .polymarket import Comparable, PolymarketClient, describe_comparable, find_comparable
 from .research import Estimate, ResearchCache, ResearchFailed, Researcher, journal
 from .risk import current_position
 from .strategy import MarketPlan, best_ask, decide
@@ -54,6 +55,10 @@ class AutopilotSettings:
     research_ttl_hours: float = 12.0
     min_confidence: str = "medium"
     max_price_drift_cents: int = 15       # discard an estimate if the market has moved further than this since research
+    # cross-exchange comparison (Polymarket prices, read-only)
+    polymarket_enabled: bool = True
+    min_cross_exchange_gap_cents: int = 8    # research markets where Kalshi and Polymarket disagree by this much first
+    min_cross_match_similarity: float = 0.5
     # trading
     edge_cents: int = 10                  # required gap between estimate and ask
     max_contracts: int = 10               # per market
@@ -189,7 +194,7 @@ def estimate_to_plan(est: Estimate, cfg: AutopilotSettings) -> MarketPlan | None
 
 class Autopilot:
     def __init__(self, client: KalshiClient, cfg: AutopilotSettings, cache: ResearchCache, journal_path,
-                 researcher: Researcher | None = None, dry_run: bool = False):
+                 researcher: Researcher | None = None, dry_run: bool = False, polymarket: PolymarketClient | None = None):
         self.client = client
         self.cfg = cfg
         self.cache = cache
@@ -197,6 +202,8 @@ class Autopilot:
         self.researcher = researcher
         self.dry_run = dry_run
         self._fresh: set[str] = set()   # tickers researched during the current pass
+        self.polymarket = polymarket if polymarket is not None else (PolymarketClient() if cfg.polymarket_enabled else None)
+        self._comparables: dict[str, Comparable] = {}
 
     def _researcher(self) -> Researcher:
         if self.researcher is None:
@@ -223,8 +230,10 @@ class Autopilot:
                 log.info("%s: empty order book, skipping research", m["ticker"])
                 continue
             budget -= 1
+            comp = self._comparables.get(m["ticker"])
+            context = [describe_comparable(comp)] if comp else None
             try:
-                est = self._researcher().estimate(m)
+                est = self._researcher().estimate(m, context)
             except ResearchFailed as exc:
                 log.warning("%s: research failed: %s", m["ticker"], exc)
                 journal(self.journal_path, {"kind": "research_failed", "ticker": m["ticker"], "error": str(exc)})
@@ -237,7 +246,9 @@ class Autopilot:
             self.cache.put(est)
             self._fresh.add(est.ticker)
             spent += est.cost_usd
-            journal(self.journal_path, {"kind": "estimate", **est.to_dict(), "title": m.get("title")})
+            journal(self.journal_path, {"kind": "estimate", **est.to_dict(), "title": m.get("title"),
+                                        **({"polymarket": {"question": comp.poly.question, "yes_cents": comp.poly_yes_cents,
+                                                           "similarity": comp.score}} if comp else {})})
             log.info("%s: estimate %.0f%% (%s confidence, market %sc) cost ~$%.2f %s", est.ticker, est.yes_prob * 100, est.confidence,
                      est.market_yes_price, est.cost_usd, "" if est.should_trade else f"SKIP: {est.skip_reason}")
             estimates.append(est)
@@ -255,6 +266,37 @@ class Autopilot:
             log.warning("%s: could not fetch order book before research: %s", ticker, exc)
             return False
         return best_ask(book, "yes") is not None or best_ask(book, "no") is not None
+
+    def _rank_by_cross_exchange_gap(self, candidates: list[dict]) -> list[dict]:
+        """Match candidates to Polymarket and put the biggest disagreements first."""
+        self._comparables = {}
+        if not self.polymarket or not candidates:
+            return candidates
+        try:
+            poly = self.polymarket.active_markets()
+        except Exception as exc:
+            log.warning("polymarket: could not fetch markets: %s", exc)
+            return candidates
+        for m in candidates:
+            comp = find_comparable(m, mid_cents(m), poly, min_similarity=self.cfg.min_cross_match_similarity)
+            if comp:
+                self._comparables[m["ticker"]] = comp
+        gaps = sorted(self._comparables.values(), key=lambda c: -abs(c.gap_cents))
+        log.info("polymarket: %d markets fetched, %d of %d candidates matched", len(poly), len(gaps), len(candidates))
+        for c in gaps[:5]:
+            log.info("  %s kalshi %.0fc vs polymarket %.0fc (gap %+.0fc, similarity %.0f%%): %s",
+                     c.kalshi_ticker, c.kalshi_mid_cents, c.poly_yes_cents, c.gap_cents, c.score * 100, c.poly.question[:80])
+            journal(self.journal_path, {"kind": "cross_market", "ticker": c.kalshi_ticker, "kalshi_mid": c.kalshi_mid_cents,
+                                        "polymarket_yes": c.poly_yes_cents, "gap": round(c.gap_cents, 1), "similarity": c.score,
+                                        "question": c.poly.question})
+        threshold = self.cfg.min_cross_exchange_gap_cents
+
+        def key(m: dict):
+            c = self._comparables.get(m["ticker"])
+            gap = abs(c.gap_cents) if c else 0.0
+            return (0 if gap >= threshold else 1, -gap, -volume(m))
+
+        return sorted(candidates, key=key)
 
     def _estimate_is_current(self, est: Estimate, now: datetime) -> bool:
         """Re-check the market before trading a stored estimate.
@@ -302,6 +344,7 @@ class Autopilot:
             if top:
                 log.warning("highest-volume market as returned by the API: %s", json.dumps(top[0], default=str)[:1500])
 
+        candidates = self._rank_by_cross_exchange_gap(candidates)
         estimates = self.gather_estimates(candidates)
         # Estimates made on earlier passes stay actionable while fresh, even if today's scan
         # missed their markets (the list is paged and its order shifts).

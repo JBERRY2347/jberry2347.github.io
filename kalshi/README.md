@@ -172,6 +172,18 @@ market at `research_effort = "high"` with 8 searches, roughly half at `"medium"`
 keeps trading on cached estimates but researches nothing new until tomorrow. Every estimate in
 the journal carries its own `cost_usd`.
 
+**Second opinion from Polymarket.** Before researching, the autopilot pulls the open
+markets from Polymarket's public Gamma API (no account needed) and matches each Kalshi
+candidate to the closest question by wording and close date. Candidates where the two
+exchanges disagree by at least `min_cross_exchange_gap_cents` are researched first, since a
+price gap is where a cheap-to-find edge is most likely, and the Polymarket price is handed
+to Claude with an instruction to check that both contracts resolve on the same terms before
+treating it as evidence. Matches are logged as `cross_market` journal lines. This is
+read-only: nothing is traded on Polymarket, and a gap is a lead, not an arbitrage, because
+wording, fees and settlement dates differ between venues. Robinhood's prediction markets
+are Kalshi's own order book resold through the Robinhood app, so they carry the same prices
+and are not a separate source. Set `polymarket_enabled = false` to turn the comparison off.
+
 **What the prompt asks for.** Claude is told to treat the current market price as a strong
 prior, to only diverge when it found specific evidence, and to say when it couldn't find
 enough information, in which case the market is skipped. It is not asked to be clever.
@@ -208,6 +220,7 @@ kalshi/
 │   ├── strategy.py    fair-value plan loader and decision logic
 │   ├── research.py    Claude + web search -> probability estimate, cache, journal
 │   ├── autopilot.py   market selection, exposure caps, the research-then-trade pass
+│   ├── polymarket.py  read-only Polymarket prices matched to Kalshi markets
 │   └── cli.py         argparse commands
 ├── tests/             pytest suite (signing, client, risk, strategy, research, autopilot, CLI)
 ├── config.example.toml
