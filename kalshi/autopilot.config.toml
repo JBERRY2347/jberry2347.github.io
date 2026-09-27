@@ -22,9 +22,9 @@ include_series = []
 exclude_series = []
 exclude_keywords = []
 
-model = "claude-opus-5"           # "claude-sonnet-5" is ~40% of the price with somewhat less careful reasoning
+model = "claude-sonnet-5"         # ~40% of Opus's price per token; "claude-opus-5" for more careful reasoning
 max_research_per_pass = 3
-max_searches_per_market = 5       # each search ~$0.01 plus the pages it reads; this is most of the cost
+max_searches_per_market = 6       # each search ~$0.01 plus the pages it reads; this is most of the cost
 research_effort = "medium"        # "high" roughly doubles the cost per market
 max_research_usd_per_day = 3.0    # hard cap on estimated Claude spend per UTC day
 research_ttl_hours = 12
