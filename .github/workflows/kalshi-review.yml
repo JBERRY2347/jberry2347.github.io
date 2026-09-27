@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      KALSHI_ENV: ${{ vars.KALSHI_ENV || 'demo' }}
+      KALSHI_ENV: ${{ vars.KALSHI_ENV || secrets.KALSHI_ENV || 'demo' }}
       KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
       KALSHI_CONFIG: ${{ github.workspace }}/kalshi/autopilot.config.toml
       KALSHI_STATE: ${{ github.workspace }}/.kalshi-state/state.json
