@@ -28,10 +28,12 @@ pip install -r requirements.txt
 ### API key
 
 The Kalshi phone app and website share one account, but API keys are created on the
-website: **kalshi.com → Account → Settings → API Keys → Create**. Kalshi shows the key id
-and lets you download a `.pem` private key once. Save it somewhere private, for example
+website: **kalshi.com → Account → Profile → API Keys → Create New API Key**, choosing the
+Predictions product. Kalshi shows the key id and lets you download the private key once,
+as a `.pem`, `.key` or `.txt` file. Keys issued since September 2026 are Ed25519; older
+ones are RSA. Both work. Save the file somewhere private, for example
 `~/.config/kalshi-trader/kalshi.pem`, and never commit it (this folder's `.gitignore`
-ignores `*.pem`).
+ignores `*.pem` and `*.key`).
 
 For practice, create a separate demo account at **demo.kalshi.co** and make an API key
 there. Demo keys only work with `--env demo`, production keys only with `--env prod`.
@@ -196,7 +198,7 @@ pause it.
 ```
 kalshi/
 ├── kalshi_trader/
-│   ├── auth.py        RSA-PSS request signing (KALSHI-ACCESS-* headers)
+│   ├── auth.py        request signing, Ed25519 or RSA-PSS (KALSHI-ACCESS-* headers)
 │   ├── client.py      REST client: markets, order book, portfolio, orders
 │   ├── config.py      env/TOML settings and RiskLimits
 │   ├── risk.py        pre-trade checks and the daily spend ledger
