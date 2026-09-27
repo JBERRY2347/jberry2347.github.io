@@ -233,7 +233,7 @@ def cmd_autopilot(t: Trader, args):
     from .research import ResearchCache
 
     t.guard_live()
-    cfg = AutopilotSettings.from_mapping(t.settings.autopilot)
+    cfg = AutopilotSettings.from_mapping(t.settings.autopilot, env=t.settings.env)
     if args.max_research is not None:
         cfg.max_research_per_pass = args.max_research
     if not args.dry_run and not args.yes and sys.stdin.isatty():
