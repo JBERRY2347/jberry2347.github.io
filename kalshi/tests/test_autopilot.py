@@ -133,3 +133,18 @@ def test_env_overrides_apply_only_to_that_env():
     assert AutopilotSettings.from_mapping(raw, env="prod").min_volume == 1000
     assert AutopilotSettings.from_mapping(raw, env="prod").edge_cents == 12
     assert AutopilotSettings.from_mapping(raw).min_volume == 1000
+
+
+def test_redact_hides_keys_headers_and_pem():
+    from kalshi_trader.autopilot import _error_chain, redact
+    text = 'Illegal header value b\'x\\n --header "x-api-key: sk-ant-api03-abcDEF_123"\' and -----BEGIN PRIVATE KEY-----\nMC4C\n-----END PRIVATE KEY-----'
+    out = redact(text)
+    assert "sk-ant" not in out and "MC4C" not in out and "[redacted]" in out
+    try:
+        try:
+            raise ValueError("inner sk-ant-api03-zzz")
+        except ValueError as e:
+            raise RuntimeError("outer") from e
+    except RuntimeError as exc:
+        chain = _error_chain(exc)
+    assert chain.startswith("RuntimeError: outer <- ValueError: inner") and "zzz" not in chain
