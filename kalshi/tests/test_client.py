@@ -66,7 +66,7 @@ def test_client_raises_on_http_error(settings, fake_session):
 def test_v2_body_maps_yes_no_onto_bid_ask():
     yes_buy = OrderRequest("T", "buy", "yes", 3, 44, client_order_id="c1").to_v2_body()
     assert yes_buy == {"ticker": "T", "client_order_id": "c1", "side": "bid", "count": "3.00", "price": "0.4400",
-                       "time_in_force": "good_till_canceled"}
+                       "time_in_force": "good_till_canceled", "self_trade_prevention_type": "taker_at_cross"}
     no_buy = OrderRequest("T", "buy", "no", 10, 93).to_v2_body()          # buy NO at 93c == sell YES at 7c
     assert (no_buy["side"], no_buy["price"], no_buy["count"]) == ("ask", "0.0700", "10.00")
     yes_sell = OrderRequest("T", "sell", "yes", 2, 60).to_v2_body()
