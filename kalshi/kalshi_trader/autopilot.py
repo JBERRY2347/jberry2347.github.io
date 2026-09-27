@@ -260,7 +260,7 @@ class Autopilot:
         log.info("account ok: cash $%.2f%s", int(balance.get("balance") or 0) / 100,
                  f", funded exchange shards {sorted(shards)}" if shards is not None else "")
 
-        markets = self.client.markets(status="open", limit=1000, max_pages=10)
+        markets = self.client.markets(status="open", limit=1000, max_pages=30)
         stats: dict[str, int] = {}
         candidates = select_markets(markets, self.cfg, stats=stats, shards=shards)
         log.info("%d open markets, %d candidates after filters", len(markets), len(candidates))
@@ -270,9 +270,15 @@ class Autopilot:
             log.warning("rejection reasons: %s", ", ".join(f"{k}: {v}" for k, v in sorted(stats.items(), key=lambda kv: -kv[1])))
             if top:
                 log.warning("highest-volume market as returned by the API: %s", json.dumps(top[0], default=str)[:1500])
-            return []
 
         estimates = self.gather_estimates(candidates)
+        # Estimates made on earlier passes stay actionable while fresh, even if today's scan
+        # missed their markets (the list is paged and its order shifts).
+        seen = {e.ticker for e in estimates}
+        for est in self.cache.all():
+            if est.ticker not in seen and self.cache.get(est.ticker) is not None:
+                estimates.append(est)
+                seen.add(est.ticker)
         plans = [p for p in (estimate_to_plan(e, self.cfg) for e in estimates) if p]
         log.info("%d estimates, %d tradeable", len(estimates), len(plans))
         if not plans:
