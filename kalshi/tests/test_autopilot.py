@@ -72,6 +72,8 @@ def test_run_once_researches_trades_and_journals(settings, fake_session, tmp_pat
     fake_session.route("GET", "/markets/A-1/orderbook", {"orderbook": {"yes": [[40, 50]], "no": [[56, 50]]}})  # yes ask 44
     fake_session.route("GET", "/markets/B-1/orderbook", {"orderbook": {"yes": [[70, 50]], "no": [[26, 50]]}})  # yes ask 74
     fake_session.route("GET", "/markets/C-1/orderbook", {"orderbook": {"yes": [[50, 5]], "no": [[45, 5]]}})
+    for m in ms:  # re-check on the second pass: prices unchanged, so stored estimates stay valid
+        fake_session.route("GET", f"/markets/{m['ticker']}", {"market": m})
     client = KalshiClient(settings, session=fake_session)
 
     cfg = AutopilotSettings(min_volume=500, max_research_per_pass=2, edge_cents=10, max_contracts=5,
@@ -195,10 +197,40 @@ def test_cached_estimates_trade_even_when_scan_finds_no_candidates(settings, fak
     fake_session.route("GET", "/portfolio/positions", {"market_positions": []})
     fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
     fake_session.route("GET", "/markets/OLD-1/orderbook", {"orderbook": {"yes": [[40, 50]], "no": [[56, 50]]}})  # yes ask 44
+    fake_session.route("GET", "/markets/OLD-1", {"market": market("OLD-1", hours=48, bid=40, ask=44)})
     client = KalshiClient(settings, session=fake_session)
     cache = ResearchCache(tmp_path / "c.json", 12)
-    cache.put(Estimate("OLD-1", 0.60, "high", True, "", "r", researched_at=datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    cache.put(Estimate("OLD-1", 0.60, "high", True, "", "r", market_yes_price=42,
+                       researched_at=datetime.now(timezone.utc).isoformat(timespec="seconds")))
     placed = []
     pilot = Autopilot(client, AutopilotSettings(edge_cents=10, max_contracts=3), cache, tmp_path / "j.jsonl", researcher=ScriptedResearcher({}))
     pilot.run_once(lambda o: placed.append(o) or {"order_id": "o1"})
     assert [(o.ticker, o.side, o.price_cents, o.count) for o in placed] == [("OLD-1", "yes", 44, 3)]
+
+
+
+def test_stored_estimate_is_dropped_when_price_drifted_or_market_closing(settings, fake_session, tmp_path):
+    from datetime import datetime, timezone
+    fake_session.route("GET", "/markets", {"markets": [], "cursor": ""})
+    fake_session.route("GET", "/portfolio/balance", {"balance": 50_000})
+    fake_session.route("GET", "/portfolio/positions", {"market_positions": []})
+    fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
+    # DRIFT: researched at 6c mid, now trading at 37c -> stale, dropped from cache
+    fake_session.route("GET", "/markets/DRIFT", {"market": market("DRIFT", hours=48, bid=35, ask=39)})
+    # SOON: price unchanged but the market closes in 2 hours -> not traded
+    fake_session.route("GET", "/markets/SOON", {"market": market("SOON", hours=2, bid=40, ask=44)})
+    for t in ("DRIFT", "SOON"):
+        fake_session.route("GET", f"/markets/{t}/orderbook", {"orderbook": {"yes": [[5, 50]], "no": [[60, 50]]}})
+    client = KalshiClient(settings, session=fake_session)
+    cache = ResearchCache(tmp_path / "c.json", 12)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cache.put(Estimate("DRIFT", 0.06, "high", True, "", "r", market_yes_price=6, researched_at=now))
+    cache.put(Estimate("SOON", 0.60, "high", True, "", "r", market_yes_price=42, researched_at=now))
+    placed = []
+    pilot = Autopilot(client, AutopilotSettings(edge_cents=3, max_price_drift_cents=15, min_hours_to_close=6), cache,
+                      tmp_path / "j.jsonl", researcher=ScriptedResearcher({}))
+    pilot.run_once(lambda o: placed.append(o) or {})
+    assert placed == []
+    assert cache.get("DRIFT") is None          # dropped so it gets re-researched
+    assert cache.get("SOON") is not None       # kept; just not traded this close to settlement
+    assert "estimate_stale" in (tmp_path / "j.jsonl").read_text()

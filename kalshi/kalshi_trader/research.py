@@ -245,6 +245,11 @@ class ResearchCache:
     def all(self) -> list[Estimate]:
         return [Estimate.from_dict(d) for d in self._data.values()]
 
+    def drop(self, ticker: str) -> None:
+        if self._data.pop(ticker, None) is not None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(self._data, indent=2))
+
     def spent_today_usd(self) -> float:
         """Estimated research spend on estimates made today (UTC). Failed calls are not counted."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

@@ -29,6 +29,7 @@ research_effort = "medium"        # "high" roughly doubles the cost per market
 max_research_usd_per_day = 3.0    # hard cap on estimated Claude spend per UTC day
 research_ttl_hours = 12
 min_confidence = "medium"
+max_price_drift_cents = 15        # if the market moved further than this since research, the estimate is stale
 
 edge_cents = 10
 max_contracts = 10

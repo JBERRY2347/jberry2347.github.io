@@ -53,6 +53,7 @@ class AutopilotSettings:
     max_research_usd_per_day: float = 3.0     # hard cap on estimated Claude spend per UTC day; 0 disables
     research_ttl_hours: float = 12.0
     min_confidence: str = "medium"
+    max_price_drift_cents: int = 15       # discard an estimate if the market has moved further than this since research
     # trading
     edge_cents: int = 10                  # required gap between estimate and ask
     max_contracts: int = 10               # per market
@@ -195,6 +196,7 @@ class Autopilot:
         self.journal_path = journal_path
         self.researcher = researcher
         self.dry_run = dry_run
+        self._fresh: set[str] = set()   # tickers researched during the current pass
 
     def _researcher(self) -> Researcher:
         if self.researcher is None:
@@ -233,6 +235,7 @@ class Autopilot:
                 journal(self.journal_path, {"kind": "research_error", "ticker": m["ticker"], "error": detail})
                 continue
             self.cache.put(est)
+            self._fresh.add(est.ticker)
             spent += est.cost_usd
             journal(self.journal_path, {"kind": "estimate", **est.to_dict(), "title": m.get("title")})
             log.info("%s: estimate %.0f%% (%s confidence, market %sc) cost ~$%.2f %s", est.ticker, est.yes_prob * 100, est.confidence,
@@ -253,8 +256,36 @@ class Autopilot:
             return False
         return best_ask(book, "yes") is not None or best_ask(book, "no") is not None
 
+    def _estimate_is_current(self, est: Estimate, now: datetime) -> bool:
+        """Re-check the market before trading a stored estimate.
+
+        A big price move since research means new information the estimate does not
+        have (a game in progress, a data release), so the estimate is dropped and the
+        market queued for fresh research rather than traded against.
+        """
+        try:
+            m = self.client.market(est.ticker)
+        except Exception as exc:
+            log.warning("%s: could not re-check market: %s", est.ticker, exc)
+            return False
+        if m.get("status") not in (None, "open", "active"):
+            return False
+        close = _parse_time(m.get("close_time"))
+        if close is not None and (close - now).total_seconds() / 3600 < self.cfg.min_hours_to_close:
+            log.info("%s: closes within %.0fh, not trading a stored estimate", est.ticker, self.cfg.min_hours_to_close)
+            return False
+        mid = mid_cents(m)
+        if mid is not None and est.market_yes_price is not None and abs(mid - est.market_yes_price) > self.cfg.max_price_drift_cents:
+            log.warning("%s: price moved %.0fc -> %.0fc since research; estimate dropped as stale",
+                        est.ticker, est.market_yes_price, mid)
+            journal(self.journal_path, {"kind": "estimate_stale", "ticker": est.ticker, "researched_mid": est.market_yes_price, "current_mid": mid})
+            self.cache.drop(est.ticker)
+            return False
+        return True
+
     def run_once(self, place) -> list[dict]:
         """One full pass. ``place(order)`` submits through the Trader's risk rails."""
+        self._fresh = set()
         balance = self.client.balance()   # first: proves the API key signs correctly
         shards = funded_exchange_indexes(balance)
         log.info("account ok: cash $%.2f%s", int(balance.get("balance") or 0) / 100,
@@ -279,6 +310,8 @@ class Autopilot:
             if est.ticker not in seen and self.cache.get(est.ticker) is not None:
                 estimates.append(est)
                 seen.add(est.ticker)
+        now = datetime.now(timezone.utc)
+        estimates = [e for e in estimates if e.ticker in self._fresh or self._estimate_is_current(e, now)]
         plans = [p for p in (estimate_to_plan(e, self.cfg) for e in estimates) if p]
         log.info("%d estimates, %d tradeable", len(estimates), len(plans))
         if not plans:
