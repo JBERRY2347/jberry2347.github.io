@@ -39,7 +39,6 @@ jobs:
       KALSHI_ENV: ${{ vars.KALSHI_ENV || 'demo' }}
       KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      KALSHI_PRIVATE_KEY: ${{ runner.temp }}/kalshi.pem
       KALSHI_CONFIG: ${{ github.workspace }}/kalshi/autopilot.config.toml
       KALSHI_STATE: ${{ github.workspace }}/.kalshi-state/state.json
     steps:
@@ -64,7 +63,8 @@ jobs:
       - name: Write private key
         run: |
           umask 077
-          printf '%s\n' "$PEM" > "$KALSHI_PRIVATE_KEY"
+          printf '%s\n' "$PEM" > "$RUNNER_TEMP/kalshi.pem"
+          echo "KALSHI_PRIVATE_KEY=$RUNNER_TEMP/kalshi.pem" >> "$GITHUB_ENV"
         env:
           PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
 
