@@ -16,6 +16,7 @@ Each pass:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -68,36 +69,70 @@ def _parse_time(value) -> datetime | None:
         return None
 
 
-def select_markets(markets: list[dict], cfg: AutopilotSettings, now: datetime | None = None) -> list[dict]:
-    """Filter and rank candidate markets. Highest volume first."""
+def _cents(m: dict, field: str) -> int | None:
+    """Read a price in cents, accepting Kalshi's integer-cent or `_dollars` string fields."""
+    v = m.get(field)
+    if v is None:
+        d = m.get(field + "_dollars")
+        if d is None:
+            return None
+        try:
+            return round(float(d) * 100)
+        except (TypeError, ValueError):
+            return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def rejection_reason(m: dict, cfg: AutopilotSettings, now: datetime) -> str | None:
+    """Why this market is not a candidate, or None if it is one."""
+    if m.get("status") not in (None, "open", "active"):
+        return f"status={m.get('status')}"
+    close = _parse_time(m.get("close_time"))
+    if close is None:
+        return "no close_time"
+    hours = (close - now).total_seconds() / 3600
+    if hours < cfg.min_hours_to_close:
+        return "closes too soon"
+    if hours > cfg.max_days_to_close * 24:
+        return "closes too far out"
+    if int(m.get("volume") or 0) < cfg.min_volume:
+        return "volume below min_volume"
+    yb, ya = _cents(m, "yes_bid"), _cents(m, "yes_ask")
+    if yb is None or ya is None:
+        return "no bid/ask"
+    if ya - yb > cfg.max_spread_cents:
+        return "spread too wide"
+    mid = (yb + ya) / 2
+    if mid < cfg.min_price_cents or mid > cfg.max_price_cents:
+        return "price outside band"
+    series = str(m.get("series_ticker") or m.get("event_ticker") or m.get("ticker", "")).split("-")[0]
+    if cfg.include_series and series not in cfg.include_series:
+        return "series not included"
+    if series in cfg.exclude_series:
+        return "series excluded"
+    title = (m.get("title") or "").lower()
+    if any(k.lower() in title for k in cfg.exclude_keywords):
+        return "keyword excluded"
+    return None
+
+
+def select_markets(markets: list[dict], cfg: AutopilotSettings, now: datetime | None = None,
+                   stats: dict[str, int] | None = None) -> list[dict]:
+    """Filter and rank candidate markets, highest volume first.
+
+    If ``stats`` is given, it is filled with a count of rejection reasons.
+    """
     now = now or datetime.now(timezone.utc)
     keep = []
     for m in markets:
-        if m.get("status") not in (None, "open", "active"):
-            continue
-        close = _parse_time(m.get("close_time"))
-        if close is None:
-            continue
-        hours = (close - now).total_seconds() / 3600
-        if hours < cfg.min_hours_to_close or hours > cfg.max_days_to_close * 24:
-            continue
-        if int(m.get("volume") or 0) < cfg.min_volume:
-            continue
-        yb, ya = m.get("yes_bid"), m.get("yes_ask")
-        if yb is None or ya is None or int(ya) - int(yb) > cfg.max_spread_cents:
-            continue
-        mid = (int(yb) + int(ya)) / 2
-        if mid < cfg.min_price_cents or mid > cfg.max_price_cents:
-            continue
-        series = str(m.get("series_ticker") or m.get("event_ticker") or m.get("ticker", "")).split("-")[0]
-        if cfg.include_series and series not in cfg.include_series:
-            continue
-        if series in cfg.exclude_series:
-            continue
-        title = (m.get("title") or "").lower()
-        if any(k.lower() in title for k in cfg.exclude_keywords):
-            continue
-        keep.append(m)
+        reason = rejection_reason(m, cfg, now)
+        if reason is None:
+            keep.append(m)
+        elif stats is not None:
+            stats[reason] = stats.get(reason, 0) + 1
     keep.sort(key=lambda m: int(m.get("volume") or 0), reverse=True)
     return keep
 
@@ -173,10 +208,18 @@ class Autopilot:
 
     def run_once(self, place) -> list[dict]:
         """One full pass. ``place(order)`` submits through the Trader's risk rails."""
+        balance = self.client.balance()   # first: proves the API key signs correctly
+        log.info("account ok: cash $%.2f", int(balance.get("balance") or 0) / 100)
+
         markets = self.client.markets(status="open", limit=1000, max_pages=5)
-        candidates = select_markets(markets, self.cfg)
+        stats: dict[str, int] = {}
+        candidates = select_markets(markets, self.cfg, stats=stats)
         log.info("%d open markets, %d candidates after filters", len(markets), len(candidates))
         if not candidates:
+            log.warning("rejection reasons: %s", ", ".join(f"{k}: {v}" for k, v in sorted(stats.items(), key=lambda kv: -kv[1])))
+            if markets:
+                sample = max(markets, key=lambda m: int(m.get("volume") or 0))
+                log.warning("highest-volume market as returned by the API: %s", json.dumps(sample, default=str)[:1500])
             return []
 
         estimates = self.gather_estimates(candidates)
@@ -185,7 +228,7 @@ class Autopilot:
         if not plans:
             return []
 
-        balance = self.client.balance()
+        balance = self.client.balance()   # again: cash may have changed during research
         positions = self.client.positions()
         resting = self.client.orders(status="resting")
         cash = int(balance.get("balance") or 0)

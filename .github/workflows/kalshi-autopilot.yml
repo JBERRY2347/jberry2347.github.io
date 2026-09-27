@@ -90,6 +90,7 @@ jobs:
         if: steps.gate.outputs.enabled == 'true'
         working-directory: kalshi
         run: |
+          mkdir -p "$(dirname "$KALSHI_STATE")"
           FLAGS="-y"
           if [ "$KALSHI_ENV" = "prod" ]; then FLAGS="$FLAGS --live"; fi
           if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
