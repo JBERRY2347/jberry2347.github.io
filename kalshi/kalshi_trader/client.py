@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Iterator
 
 import requests
@@ -54,7 +55,34 @@ class OrderRequest:
             per_contract = 100 - per_contract
         return per_contract * self.count
 
+    def to_v2_body(self) -> dict[str, Any]:
+        """Kalshi's V2 order shape: one YES book with bid/ask sides, fixed-point dollar strings.
+
+        Buying YES at p  -> bid at p.        Selling YES at p -> ask at p.
+        Buying NO at p   -> ask at 1 - p.    Selling NO at p  -> bid at 1 - p.
+        """
+        if self.is_market:
+            # No market orders in V2 here: cross the book with a limit at the extreme instead.
+            yes_price = 99 if (self.action == "buy") == (self.side == "yes") else 1
+        elif self.side == "yes":
+            yes_price = self.price_cents
+        else:
+            yes_price = 100 - self.price_cents
+        buying_yes_exposure = (self.action == "buy") == (self.side == "yes")
+        body: dict[str, Any] = {
+            "ticker": self.ticker,
+            "client_order_id": self.client_order_id or str(uuid.uuid4()),
+            "side": "bid" if buying_yes_exposure else "ask",
+            "count": f"{self.count:.2f}",
+            "price": f"{yes_price / 100:.4f}",
+            "time_in_force": "good_till_canceled",
+        }
+        if self.expiration_ts is not None:
+            body["expiration_time"] = datetime.fromtimestamp(self.expiration_ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        return body
+
     def to_body(self) -> dict[str, Any]:
+        """The legacy (yes/no, integer cents) shape; kept for the journal and tests."""
         body: dict[str, Any] = {
             "ticker": self.ticker,
             "action": self.action,
@@ -198,10 +226,12 @@ class KalshiClient:
         return list(self._paginate("/portfolio/fills", "fills", params, max_pages=1))
 
     def create_order(self, order: OrderRequest) -> dict:
-        return self._request("POST", "/portfolio/orders", json=order.to_body()).get("order", {})
+        """Place an order via the V2 endpoint (the legacy /portfolio/orders returns 410)."""
+        data = self._request("POST", "/portfolio/events/orders", json=order.to_v2_body())
+        return data.get("order", data) if isinstance(data, dict) else {}
 
     def cancel_order(self, order_id: str) -> dict:
-        return self._request("DELETE", f"/portfolio/orders/{order_id}")
+        return self._request("DELETE", f"/portfolio/events/orders/{order_id}")
 
     def cancel_all(self) -> list[dict]:
         cancelled = []

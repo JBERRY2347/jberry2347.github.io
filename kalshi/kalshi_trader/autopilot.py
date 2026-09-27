@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .client import KalshiClient, OrderRequest
+from .client import KalshiClient, KalshiError, OrderRequest
 from .fields import count, exposure_cents, funded_exchange_indexes, mid_cents, price_cents, spread_cents, volume
 from .research import Estimate, ResearchCache, ResearchFailed, Researcher, journal
 from .risk import current_position
@@ -311,9 +311,14 @@ class Autopilot:
             if order is None:
                 log.warning("%s: exposure cap reached; skipping", plan.ticker)
                 continue
-            resp = place(order)
+            try:
+                resp = place(order)
+            except KalshiError as exc:
+                log.error("%s: order rejected: %s", plan.ticker, redact(str(exc)))
+                journal(self.journal_path, {"kind": "order_rejected", "ticker": plan.ticker, **order.to_body(), "error": redact(str(exc))})
+                continue
             journal(self.journal_path, {"kind": "order", "ticker": plan.ticker, "fair_yes_cents": plan.fair_yes_cents,
-                                        **order.to_body(), "dry_run": self.dry_run, "result": resp})
+                                        **order.to_body(), "v2": order.to_v2_body(), "dry_run": self.dry_run, "result": resp})
             if resp is not None:
                 cost = order.max_cost_cents()
                 exposure += cost

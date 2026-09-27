@@ -55,12 +55,34 @@ def test_client_paginates_with_cursor(settings, fake_session):
 
 
 def test_client_raises_on_http_error(settings, fake_session):
-    fake_session.route("POST", "/portfolio/orders", {"error": {"code": "insufficient_balance"}}, status=400)
+    fake_session.route("POST", "/portfolio/events/orders", {"error": {"code": "insufficient_balance"}}, status=400)
     c = KalshiClient(settings, session=fake_session)
     with pytest.raises(KalshiError) as ei:
         c.create_order(OrderRequest("T", "buy", "yes", 1, 50))
     assert ei.value.status == 400
-    assert fake_session.calls[0]["json"]["yes_price"] == 50
+    assert fake_session.calls[0]["json"]["price"] == "0.5000"
+
+
+def test_v2_body_maps_yes_no_onto_bid_ask():
+    yes_buy = OrderRequest("T", "buy", "yes", 3, 44, client_order_id="c1").to_v2_body()
+    assert yes_buy == {"ticker": "T", "client_order_id": "c1", "side": "bid", "count": "3.00", "price": "0.4400",
+                       "time_in_force": "good_till_canceled"}
+    no_buy = OrderRequest("T", "buy", "no", 10, 93).to_v2_body()          # buy NO at 93c == sell YES at 7c
+    assert (no_buy["side"], no_buy["price"], no_buy["count"]) == ("ask", "0.0700", "10.00")
+    yes_sell = OrderRequest("T", "sell", "yes", 2, 60).to_v2_body()
+    assert (yes_sell["side"], yes_sell["price"]) == ("ask", "0.6000")
+    no_sell = OrderRequest("T", "sell", "no", 2, 60).to_v2_body()         # sell NO at 60c == buy YES at 40c
+    assert (no_sell["side"], no_sell["price"]) == ("bid", "0.4000")
+    timed = OrderRequest("T", "buy", "yes", 1, 50, expiration_ts=1_700_000_000).to_v2_body()
+    assert timed["expiration_time"] == "2023-11-14T22:13:20Z"
+
+
+def test_create_and_cancel_use_v2_paths(settings, fake_session):
+    fake_session.route("POST", "/portfolio/events/orders", {"order": {"order_id": "o9", "status": "resting"}})
+    fake_session.route("DELETE", "/portfolio/events/orders/o9", {"order": {"order_id": "o9", "status": "canceled"}})
+    c = KalshiClient(settings, session=fake_session)
+    assert c.create_order(OrderRequest("T", "buy", "yes", 1, 50))["order_id"] == "o9"
+    assert c.cancel_order("o9")["order"]["status"] == "canceled"
 
 
 def test_client_requires_credentials_for_private_calls(settings, fake_session):

@@ -142,7 +142,7 @@ class Researcher:
     def __init__(self, client=None, model: str = DEFAULT_MODEL, max_searches: int = 8, effort: str = "high"):
         if client is None:
             import anthropic  # imported lazily so the CLI works without the SDK for non-autopilot commands
-            client = anthropic.Anthropic()
+            client = anthropic.Anthropic(timeout=300.0, max_retries=1)
         self.client = client
         self.model = model
         self.max_searches = max_searches
@@ -158,7 +158,7 @@ class Researcher:
     def _research_text(self, market: dict) -> tuple[str, int, int, int]:
         tools = [
             {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches},
-            {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": self.max_searches},
+            {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": min(self.max_searches, 4), "max_content_tokens": 6000},
         ]
         messages: list[dict] = [{"role": "user", "content": "Research this Kalshi market and estimate the probability of YES.\n\n" + describe_market(market)}]
         in_tok = out_tok = searches = 0
