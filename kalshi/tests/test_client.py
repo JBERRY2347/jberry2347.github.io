@@ -68,3 +68,14 @@ def test_client_requires_credentials_for_private_calls(settings, fake_session):
     c = KalshiClient(settings, session=fake_session)
     with pytest.raises(SystemExit):
         c.balance()
+
+
+def test_orderbook_accepts_both_top_level_keys(settings, fake_session):
+    c = KalshiClient(settings, session=fake_session)
+    fake_session.route("GET", "/markets/A/orderbook", {"orderbook_fp": {"yes_dollars": [["0.40", "5.00"]], "no_dollars": []}})
+    assert c.orderbook("A") == {"yes_dollars": [["0.40", "5.00"]], "no_dollars": []}
+    fake_session.route("GET", "/markets/B/orderbook", {"orderbook": {"yes": [[40, 5]], "no": []}})
+    assert c.orderbook("B") == {"yes": [[40, 5]], "no": []}
+    fake_session.route("GET", "/markets/C/orderbook", {"something_else": 1})
+    with pytest.raises(KalshiError):
+        c.orderbook("C")
