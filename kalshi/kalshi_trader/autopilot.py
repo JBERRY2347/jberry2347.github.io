@@ -210,6 +210,9 @@ class Autopilot:
                 continue
             if budget <= 0:
                 continue
+            if not self._has_liquidity(m["ticker"]):
+                log.info("%s: empty order book, skipping research", m["ticker"])
+                continue
             budget -= 1
             try:
                 est = self._researcher().estimate(m)
@@ -228,6 +231,15 @@ class Autopilot:
                      est.market_yes_price, "" if est.should_trade else f"SKIP: {est.skip_reason}")
             estimates.append(est)
         return estimates
+
+    def _has_liquidity(self, ticker: str) -> bool:
+        """True if someone is offering either side, so research can actually lead to a trade."""
+        try:
+            book = self.client.orderbook(ticker)
+        except Exception as exc:
+            log.warning("%s: could not fetch order book before research: %s", ticker, exc)
+            return False
+        return best_ask(book, "yes") is not None or best_ask(book, "no") is not None
 
     def run_once(self, place) -> list[dict]:
         """One full pass. ``place(order)`` submits through the Trader's risk rails."""

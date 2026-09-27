@@ -71,6 +71,7 @@ def test_run_once_researches_trades_and_journals(settings, fake_session, tmp_pat
     fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
     fake_session.route("GET", "/markets/A-1/orderbook", {"orderbook": {"yes": [[40, 50]], "no": [[56, 50]]}})  # yes ask 44
     fake_session.route("GET", "/markets/B-1/orderbook", {"orderbook": {"yes": [[70, 50]], "no": [[26, 50]]}})  # yes ask 74
+    fake_session.route("GET", "/markets/C-1/orderbook", {"orderbook": {"yes": [[50, 5]], "no": [[45, 5]]}})
     client = KalshiClient(settings, session=fake_session)
 
     cfg = AutopilotSettings(min_volume=500, max_research_per_pass=2, edge_cents=10, max_contracts=5,
@@ -108,12 +109,14 @@ def test_run_once_stops_below_min_balance(settings, fake_session, tmp_path):
     fake_session.route("GET", "/portfolio/balance", {"balance": 100})
     fake_session.route("GET", "/portfolio/positions", {"market_positions": []})
     fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
+    fake_session.route("GET", "/markets/A-1/orderbook", {"orderbook": {"yes": [[40, 50]], "no": [[50, 50]]}})
     client = KalshiClient(settings, session=fake_session)
     cfg = AutopilotSettings(min_volume=500, min_balance_cents=5000)
     researcher = ScriptedResearcher({"A-1": Estimate("A-1", 0.9, "high", True, "", "r")})
     pilot = Autopilot(client, cfg, ResearchCache(tmp_path / "c.json", 1), tmp_path / "j.jsonl", researcher=researcher)
-    assert pilot.run_once(lambda o: {"x": 1}) == []
-    assert not [c for c in fake_session.calls if "orderbook" in c["path"]]
+    placed = []
+    assert pilot.run_once(lambda o: placed.append(o) or {"x": 1}) == []
+    assert placed == []                                   # researched, but refused to buy below the cash floor
 
 
 def test_select_markets_reports_reasons_and_reads_dollar_prices():
@@ -148,3 +151,18 @@ def test_redact_hides_keys_headers_and_pem():
     except RuntimeError as exc:
         chain = _error_chain(exc)
     assert chain.startswith("RuntimeError: outer <- ValueError: inner") and "zzz" not in chain
+
+
+def test_empty_book_skips_research(settings, fake_session, tmp_path):
+    fake_session.route("GET", "/markets", {"markets": [market("A-1", volume=3000), market("B-1", volume=2000)], "cursor": ""})
+    fake_session.route("GET", "/portfolio/balance", {"balance": 50_000})
+    fake_session.route("GET", "/portfolio/positions", {"market_positions": []})
+    fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
+    fake_session.route("GET", "/markets/A-1/orderbook", {"orderbook_fp": {"yes_dollars": [], "no_dollars": []}})   # empty
+    fake_session.route("GET", "/markets/B-1/orderbook", {"orderbook_fp": {"yes_dollars": [["0.40", "5"]], "no_dollars": [["0.50", "5"]]}})
+    client = KalshiClient(settings, session=fake_session)
+    researcher = ScriptedResearcher({"B-1": Estimate("B-1", 0.5, "high", True, "", "r")})
+    pilot = Autopilot(client, AutopilotSettings(min_volume=500, max_research_per_pass=2), ResearchCache(tmp_path / "c.json", 1),
+                      tmp_path / "j.jsonl", researcher=researcher)
+    pilot.run_once(lambda o: {"order_id": "x"})
+    assert researcher.asked == ["B-1"]
