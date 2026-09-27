@@ -158,7 +158,14 @@ class KalshiClient:
         return self._request("GET", f"/markets/{ticker}", auth=False)["market"]
 
     def orderbook(self, ticker: str, depth: int = 10) -> dict:
-        return self._request("GET", f"/markets/{ticker}/orderbook", params={"depth": depth}, auth=False)["orderbook"]
+        """The resting-bid book. Kalshi has used ``orderbook`` and ``orderbook_fp`` as the top-level key."""
+        data = self._request("GET", f"/markets/{ticker}/orderbook", params={"depth": depth}, auth=False)
+        for key in ("orderbook", "orderbook_fp"):
+            if isinstance(data.get(key), dict):
+                return data[key]
+        if any(k in data for k in ("yes", "no", "yes_dollars", "no_dollars")):
+            return data
+        raise KalshiError(200, f"unexpected order book shape, keys={sorted(data)}", "GET", f"/markets/{ticker}/orderbook")
 
     def events(self, *, status: str | None = "open", series_ticker: str | None = None, limit: int = 100) -> list[dict]:
         params: dict[str, Any] = {"limit": min(limit, 200)}

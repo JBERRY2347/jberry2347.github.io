@@ -54,15 +54,17 @@ def mid_cents(m: dict) -> float | None:
 
 def orderbook_levels(book: dict, side: str) -> list[tuple[float, float]]:
     """Resting bids for ``side`` as (price_cents, quantity), whichever field shape is present."""
-    levels = book.get(side)
-    if levels:
-        return [(float(p), float(q)) for p, q in levels]
-    levels = book.get(side + "_dollars") or []
-    out = []
-    for p, q in levels:
-        pc, qc = _num(p), _num(q)
-        if pc is not None and qc is not None:
-            out.append((pc * 100, qc))
+    out: list[tuple[float, float]] = []
+    for level in book.get(side) or []:
+        p, q = _num(level[0]), _num(level[1])
+        if p is not None and q is not None:
+            out.append((p, q))
+    if out:
+        return out
+    for level in book.get(side + "_dollars") or []:
+        p, q = _num(level[0]), _num(level[1])
+        if p is not None and q is not None:
+            out.append((p * 100, q))
     return out
 
 
