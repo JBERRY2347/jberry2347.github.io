@@ -255,6 +255,40 @@ def cmd_autopilot(t: Trader, args):
             return
 
 
+def cmd_doctor(t: Trader, args):
+    """Check connectivity and authentication step by step, printing what the API said."""
+    c = t.client
+    print(f"env: {t.settings.env}   host: {t.settings.host}")
+    print(f"key id: {c.key_id_hint}   key type: {c.key_type or '(no key loaded)'}")
+    checks = [
+        ("exchange status (public)", lambda: c.exchange_status()),
+        ("markets (public)", lambda: {"count": len(c.markets(limit=1, max_pages=1))}),
+        ("api keys (authenticated)", lambda: {"keys": [{k: v for k, v in key.items() if k != "public_key"} for key in c.api_keys()]}),
+        ("balance (authenticated)", lambda: c.balance()),
+        ("positions (authenticated)", lambda: {"market_positions": len(c.positions().get("market_positions", []))}),
+        ("resting orders (authenticated)", lambda: {"count": len(c.orders(status="resting"))}),
+    ]
+    failures = 0
+    for label, fn in checks:
+        try:
+            result = fn()
+            print(f"OK    {label}: {json.dumps(result, default=str)[:400]}")
+        except KalshiError as exc:
+            failures += 1
+            resp = c.last_response
+            headers = {k: v for k, v in (resp.headers.items() if resp is not None else []) if k.lower() in
+                       ("date", "content-type", "x-request-id", "x-amzn-requestid", "cf-ray", "x-kalshi-request-id", "www-authenticate")}
+            print(f"FAIL  {label}: HTTP {exc.status} {json.dumps(exc.body, default=str)[:400]}   headers={headers}")
+        except SystemExit as exc:
+            failures += 1
+            print(f"FAIL  {label}: {exc}")
+        except Exception as exc:  # network errors, timeouts
+            failures += 1
+            print(f"FAIL  {label}: {type(exc).__name__}: {str(exc)[:300]}")
+    print("all checks passed" if not failures else f"{failures} check(s) failed")
+    return failures
+
+
 def cmd_review(t: Trader, args):
     """Score past estimates against markets that have since settled."""
     from .research import ResearchCache
@@ -362,6 +396,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("review", help="score past autopilot estimates against settled markets")
     s.set_defaults(func=cmd_review)
 
+    s = sub.add_parser("doctor", help="check connectivity and authentication, printing what the API said")
+    s.set_defaults(func=cmd_doctor)
+
     return p
 
 
@@ -373,7 +410,9 @@ def main(argv: list[str] | None = None) -> int:
         log.warning("connected to the PRODUCTION exchange (real money)")
     trader = Trader(args, settings)
     try:
-        args.func(trader, args)
+        rc = args.func(trader, args)
+        if isinstance(rc, int) and rc:
+            return rc
     except KalshiError as exc:
         log.error("%s", exc)
         return 2
