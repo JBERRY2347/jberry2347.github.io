@@ -96,3 +96,29 @@ def test_cache_sums_todays_spend(tmp_path):
     cache.put(Estimate("B", 0.5, "high", True, "", "r", researched_at=now, cost_usd=0.75))
     cache.put(Estimate("C", 0.5, "high", True, "", "r", researched_at="2020-01-01T00:00:00+00:00", cost_usd=9.0))
     assert cache.spent_today_usd() == 2.0
+
+
+def test_cache_spend_survives_dropping_stale_estimates(tmp_path):
+    from datetime import datetime, timezone
+    path = tmp_path / "c.json"
+    cache = ResearchCache(path, ttl_hours=12)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cache.put(Estimate("A", 0.5, "high", True, "", "r", researched_at=now, cost_usd=1.25))
+    cache.put(Estimate("B", 0.5, "high", True, "", "r", researched_at=now, cost_usd=0.75))
+    cache.drop("A")
+    assert cache.get("A") is None
+    assert cache.spent_today_usd() == 2.0
+    reopened = ResearchCache(path, ttl_hours=12)          # persisted in the new file format
+    assert reopened.spent_today_usd() == 2.0
+    assert [e.ticker for e in reopened.all()] == ["B"]
+
+
+def test_cache_reads_legacy_flat_file(tmp_path):
+    from datetime import datetime, timezone
+    path = tmp_path / "c.json"
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    legacy = {"A": Estimate("A", 0.5, "high", True, "", "r", researched_at=now, cost_usd=0.4).to_dict()}
+    path.write_text(json.dumps(legacy))
+    cache = ResearchCache(path, ttl_hours=12)
+    assert cache.get("A").yes_prob == 0.5
+    assert cache.spent_today_usd() == 0.4

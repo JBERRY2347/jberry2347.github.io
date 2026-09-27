@@ -108,8 +108,8 @@ class PolymarketClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def active_markets(self, max_pages: int = 30, page_size: int = 100) -> list[PolyMarket]:
-        """Open markets, busiest first. Gamma serves at most 100 per page whatever ``limit`` says."""
+    def active_markets(self, max_pages: int = 20, page_size: int = 100) -> list[PolyMarket]:
+        """Open markets, busiest first. Gamma serves at most 100 per page and rejects offsets past 2000."""
         out: list[PolyMarket] = []
         for page in range(max_pages):
             resp = self.session.get(f"{self.base_url}/markets",
@@ -149,6 +149,18 @@ def find_comparable(kalshi_market: dict, kalshi_mid_cents: float | None, poly_ma
     s, pm = best
     return Comparable(kalshi_ticker=kalshi_market["ticker"], poly=pm, score=round(s, 3),
                       kalshi_mid_cents=float(kalshi_mid_cents), poly_yes_cents=round(pm.yes_price * 100, 1))
+
+
+def nearest(kalshi_market: dict, poly_markets: list[PolyMarket]) -> tuple[float, PolyMarket] | None:
+    """Closest Polymarket question by wording alone, for tuning the similarity threshold."""
+    text = " ".join(str(kalshi_market.get(k) or "") for k in ("title", "yes_sub_title", "subtitle"))
+    ktok = tokens(text)
+    best = None
+    for pm in poly_markets:
+        sc = similarity(ktok, pm.tokens)
+        if best is None or sc > best[0]:
+            best = (sc, pm)
+    return best
 
 
 def describe_comparable(c: Comparable) -> str:

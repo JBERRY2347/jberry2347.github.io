@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 
 from .client import KalshiClient, KalshiError, OrderRequest
 from .fields import count, exposure_cents, funded_exchange_indexes, mid_cents, price_cents, spread_cents, volume
-from .polymarket import Comparable, PolymarketClient, describe_comparable, find_comparable
+from .polymarket import Comparable, PolymarketClient, describe_comparable, find_comparable, nearest
 from .research import Estimate, ResearchCache, ResearchFailed, Researcher, journal
 from .risk import current_position
 from .strategy import MarketPlan, best_ask, decide
@@ -283,6 +283,11 @@ class Autopilot:
                 self._comparables[m["ticker"]] = comp
         gaps = sorted(self._comparables.values(), key=lambda c: -abs(c.gap_cents))
         log.info("polymarket: %d markets fetched, %d of %d candidates matched", len(poly), len(gaps), len(candidates))
+        if not gaps:  # show what the closest wording looked like so the threshold can be tuned
+            for m in sorted(candidates, key=lambda m: -volume(m))[:3]:
+                near = nearest(m, poly)
+                if near:
+                    log.info("  nearest for %r: %.0f%% %r", (m.get("title") or "")[:70], near[0] * 100, near[1].question[:70])
         for c in gaps[:5]:
             log.info("  %s kalshi %.0fc vs polymarket %.0fc (gap %+.0fc, similarity %.0f%%): %s",
                      c.kalshi_ticker, c.kalshi_mid_cents, c.poly_yes_cents, c.gap_cents, c.score * 100, c.poly.question[:80])
