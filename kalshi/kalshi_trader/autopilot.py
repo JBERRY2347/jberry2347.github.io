@@ -65,6 +65,15 @@ class AutopilotSettings:
         return cls(**merged)
 
 
+def _error_chain(exc: BaseException) -> str:
+    """'OuterError: msg <- CauseError: msg', so connection errors say what actually failed."""
+    parts, cur = [], exc
+    while cur is not None and len(parts) < 6:
+        parts.append(f"{type(cur).__name__}: {str(cur)[:200]}")
+        cur = cur.__cause__ or cur.__context__
+    return " <- ".join(parts)
+
+
 def _parse_time(value) -> datetime | None:
     if not value:
         return None
@@ -194,8 +203,9 @@ class Autopilot:
                 journal(self.journal_path, {"kind": "research_failed", "ticker": m["ticker"], "error": str(exc)})
                 continue
             except Exception as exc:  # API/network errors: log and move on, never crash the pass
-                log.error("%s: research error: %s", m["ticker"], exc)
-                journal(self.journal_path, {"kind": "research_error", "ticker": m["ticker"], "error": repr(exc)})
+                detail = _error_chain(exc)
+                log.error("%s: research error: %s", m["ticker"], detail)
+                journal(self.journal_path, {"kind": "research_error", "ticker": m["ticker"], "error": detail})
                 continue
             self.cache.put(est)
             journal(self.journal_path, {"kind": "estimate", **est.to_dict(), "title": m.get("title")})
