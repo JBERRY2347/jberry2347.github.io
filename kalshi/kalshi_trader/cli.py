@@ -276,6 +276,25 @@ def cmd_doctor(t: Trader, args):
         ("positions (authenticated)", lambda: {"market_positions": len(c.positions().get("market_positions", []))}),
         ("resting orders (authenticated)", lambda: {"count": len(c.orders(status="resting"))}),
     ]
+    def anthropic_check():
+        import os
+        import anthropic
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise SystemExit("ANTHROPIC_API_KEY is not set")
+        client = anthropic.Anthropic(max_retries=0)
+        model = t.settings.autopilot.get("model", "claude-opus-5")
+        try:
+            info = client.models.retrieve(model)
+        except Exception as exc:
+            chain, cause = [], exc
+            while cause is not None and len(chain) < 6:
+                chain.append(f"{type(cause).__name__}: {str(cause)[:200]}")
+                cause = cause.__cause__ or cause.__context__
+            raise RuntimeError(" <- ".join(chain)) from None
+        return {"model": info.id, "display_name": getattr(info, "display_name", None), "sdk": anthropic.__version__}
+
+    checks.append(("anthropic api (authenticated)", anthropic_check))
+
     failures = 0
     for label, fn in checks:
         try:

@@ -115,5 +115,6 @@ jobs:
         with:
           name: kalshi-journal-${{ github.run_id }}
           path: .kalshi-state/journal-*.jsonl
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 90
