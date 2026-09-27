@@ -1,0 +1,58 @@
+# Scores the autopilot's past estimates against markets that have settled.
+# Run it by hand from the Actions tab (or ask Claude to trigger it). It only
+# reads; it never places orders. Uses the same secrets and variables as the
+# autopilot workflow and the research cache that workflow saves between runs.
+
+name: Kalshi review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KALSHI_ENV: ${{ vars.KALSHI_ENV || 'demo' }}
+      KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+      KALSHI_PRIVATE_KEY: ${{ runner.temp }}/kalshi.pem
+      KALSHI_CONFIG: ${{ github.workspace }}/kalshi/autopilot.config.toml
+      KALSHI_STATE: ${{ github.workspace }}/.kalshi-state/state.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: kalshi/requirements.txt
+
+      - name: Install
+        run: pip install -r kalshi/requirements.txt
+
+      - name: Restore research cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .kalshi-state
+          key: kalshi-state-${{ env.KALSHI_ENV }}-review-${{ github.run_id }}
+          restore-keys: kalshi-state-${{ env.KALSHI_ENV }}-
+
+      - name: Write private key
+        run: |
+          umask 077
+          printf '%s\n' "$PEM" > "$KALSHI_PRIVATE_KEY"
+        env:
+          PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
+
+      - name: Balance and positions
+        working-directory: kalshi
+        run: |
+          python -m kalshi_trader balance
+          python -m kalshi_trader positions
+
+      - name: Score estimates against settled markets
+        working-directory: kalshi
+        run: python -m kalshi_trader review
