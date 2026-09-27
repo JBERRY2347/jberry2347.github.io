@@ -186,3 +186,19 @@ def test_daily_research_budget_stops_new_research(settings, fake_session, tmp_pa
     cfg = AutopilotSettings(min_volume=500, max_research_per_pass=5, max_research_usd_per_day=3.0)
     Autopilot(client, cfg, cache, tmp_path / "j.jsonl", researcher=researcher).run_once(lambda o: {})
     assert researcher.asked == ["A-1"]          # $2.90 + $0.50 crosses the $3 cap; B-1 is not researched
+
+
+def test_cached_estimates_trade_even_when_scan_finds_no_candidates(settings, fake_session, tmp_path):
+    from datetime import datetime, timezone
+    fake_session.route("GET", "/markets", {"markets": [], "cursor": ""})       # scan finds nothing
+    fake_session.route("GET", "/portfolio/balance", {"balance": 50_000})
+    fake_session.route("GET", "/portfolio/positions", {"market_positions": []})
+    fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
+    fake_session.route("GET", "/markets/OLD-1/orderbook", {"orderbook": {"yes": [[40, 50]], "no": [[56, 50]]}})  # yes ask 44
+    client = KalshiClient(settings, session=fake_session)
+    cache = ResearchCache(tmp_path / "c.json", 12)
+    cache.put(Estimate("OLD-1", 0.60, "high", True, "", "r", researched_at=datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    placed = []
+    pilot = Autopilot(client, AutopilotSettings(edge_cents=10, max_contracts=3), cache, tmp_path / "j.jsonl", researcher=ScriptedResearcher({}))
+    pilot.run_once(lambda o: placed.append(o) or {"order_id": "o1"})
+    assert [(o.ticker, o.side, o.price_cents, o.count) for o in placed] == [("OLD-1", "yes", 44, 3)]
