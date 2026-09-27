@@ -285,6 +285,9 @@ def cmd_doctor(t: Trader, args):
         key = os.environ["ANTHROPIC_API_KEY"]
         if not key.startswith("sk-ant-") or any(ch.isspace() for ch in key):
             raise SystemExit("ANTHROPIC_API_KEY should be just the key: one line starting with sk-ant-")
+        if len(key) < 60 or "..." in key:
+            raise SystemExit(f"ANTHROPIC_API_KEY is only {len(key)} characters; a full key is ~100. "
+                             "It looks copied from the shortened list view. Create a key and use 'Copy Key' in the pop-up.")
         client = anthropic.Anthropic(max_retries=0)
         model = t.settings.autopilot.get("model", "claude-opus-5")
         try:
