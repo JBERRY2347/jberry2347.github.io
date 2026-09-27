@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .fields import mid_cents, price_cents, volume
+
 log = logging.getLogger("kalshi.research")
 
 DEFAULT_MODEL = "claude-opus-5"
@@ -92,18 +94,21 @@ def describe_market(market: dict) -> str:
                        ("close_time", "Close time (UTC)"), ("expected_expiration_time", "Expected settlement (UTC)")):
         if market.get(key):
             lines.append(f"{label}: {market[key]}")
-    yb, ya = market.get("yes_bid"), market.get("yes_ask")
+    yb, ya = price_cents(market, "yes_bid"), price_cents(market, "yes_ask")
     if yb is not None or ya is not None:
-        lines.append(f"Current YES market: bid {yb}c / ask {ya}c (last trade {market.get('last_price')}c, volume {market.get('volume')})")
+        last = price_cents(market, "last_price")
+        lines.append(f"Current YES market: bid {_fmt(yb)}c / ask {_fmt(ya)}c (last trade {_fmt(last)}c, volume {volume(market):.0f} contracts)")
     lines.append(f"Now (UTC): {_now_iso()}")
     return "\n".join(lines)
 
 
+def _fmt(cents: float | None) -> str:
+    return "?" if cents is None else (f"{cents:.0f}" if float(cents).is_integer() else f"{cents:.1f}")
+
+
 def mid_price(market: dict) -> int | None:
-    yb, ya = market.get("yes_bid"), market.get("yes_ask")
-    if yb is None or ya is None:
-        return market.get("last_price")
-    return round((int(yb) + int(ya)) / 2)
+    mid = mid_cents(market)
+    return round(mid) if mid is not None else None
 
 
 class ResearchFailed(RuntimeError):

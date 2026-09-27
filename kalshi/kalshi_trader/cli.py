@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from . import __version__
 from .client import KalshiClient, KalshiError, OrderRequest
 from .config import load_settings
+from .fields import count, exposure_cents, orderbook_levels, position_contracts, price_cents, volume
 from .risk import DailyLedger, RiskViolation, check_order
 from .strategy import load_plan, run_once
 
@@ -22,6 +23,13 @@ log = logging.getLogger("kalshi")
 
 def _cents(v) -> str:
     return f"${int(v)/100:,.2f}"
+
+
+def _c(cents) -> str:
+    """Format a cent price that may be fractional or missing."""
+    if cents is None:
+        return "-"
+    return f"{cents:.0f}" if float(cents).is_integer() else f"{cents:.1f}"
 
 
 def _ts(v) -> str:
@@ -106,8 +114,8 @@ def cmd_markets(t: Trader, args):
         needle = args.search.lower()
         markets = [m for m in markets if needle in (m.get("title", "") + " " + m.get("ticker", "") + " " + m.get("yes_sub_title", "")).lower()]
     markets = markets[: args.limit]
-    rows = [[m["ticker"], m.get("yes_bid", "-"), m.get("yes_ask", "-"), m.get("last_price", "-"), m.get("volume", 0),
-             _ts(m.get("close_time")), (m.get("title") or "")[:60]] for m in markets]
+    rows = [[m["ticker"], _c(price_cents(m, "yes_bid")), _c(price_cents(m, "yes_ask")), _c(price_cents(m, "last_price")),
+             f"{volume(m):.0f}", _ts(m.get("close_time")), (m.get("title") or "")[:60]] for m in markets]
     _out(args, markets, _table(rows, ["ticker", "yes_bid", "yes_ask", "last", "volume", "closes", "title"]))
 
 
@@ -121,15 +129,15 @@ def cmd_market(t: Trader, args):
     print(m.get("title", ""))
     if m.get("yes_sub_title"):
         print(m["yes_sub_title"])
-    print(f"yes {m.get('yes_bid')}/{m.get('yes_ask')}   no {m.get('no_bid')}/{m.get('no_ask')}   "
-          f"last {m.get('last_price')}   volume {m.get('volume')}   open interest {m.get('open_interest')}")
+    print(f"yes {_c(price_cents(m, 'yes_bid'))}/{_c(price_cents(m, 'yes_ask'))}   no {_c(price_cents(m, 'no_bid'))}/{_c(price_cents(m, 'no_ask'))}   "
+          f"last {_c(price_cents(m, 'last_price'))}   volume {volume(m):.0f}   open interest {count(m, 'open_interest'):.0f}")
     print("\norder book (resting bids, price x qty):")
-    yes = sorted(book.get("yes") or [], key=lambda l: -int(l[0]))[: args.depth]
-    no = sorted(book.get("no") or [], key=lambda l: -int(l[0]))[: args.depth]
+    yes = sorted(orderbook_levels(book, "yes"), key=lambda l: -l[0])[: args.depth]
+    no = sorted(orderbook_levels(book, "no"), key=lambda l: -l[0])[: args.depth]
     rows = []
     for i in range(max(len(yes), len(no))):
-        y = f"{yes[i][0]}c x {yes[i][1]}" if i < len(yes) else ""
-        n = f"{no[i][0]}c x {no[i][1]}" if i < len(no) else ""
+        y = f"{_c(yes[i][0])}c x {yes[i][1]:.0f}" if i < len(yes) else ""
+        n = f"{_c(no[i][0])}c x {no[i][1]:.0f}" if i < len(no) else ""
         rows.append([y, n])
     print(_table(rows, ["YES bids", "NO bids"]))
 
@@ -141,8 +149,8 @@ def cmd_balance(t: Trader, args):
 
 def cmd_positions(t: Trader, args):
     p = t.client.positions()
-    rows = [[m["ticker"], m.get("position"), _cents(m.get("market_exposure", 0)), _cents(m.get("realized_pnl", 0)), _cents(m.get("fees_paid", 0))]
-            for m in p.get("market_positions", []) if int(m.get("position", 0)) != 0 or int(m.get("resting_orders_count", 0))]
+    rows = [[m["ticker"], position_contracts(m), _cents(exposure_cents(m)), _cents(price_cents(m, "realized_pnl") or 0), _cents(price_cents(m, "fees_paid") or 0)]
+            for m in p.get("market_positions", []) if position_contracts(m) != 0 or count(m, "resting_orders_count")]
     _out(args, p, _table(rows, ["ticker", "position", "exposure", "realized pnl", "fees"]) if rows else "no open positions")
 
 
