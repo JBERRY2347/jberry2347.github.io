@@ -103,10 +103,13 @@ class KalshiClient:
             if not self._key or not self._key_id:
                 self.settings.require_credentials()
             headers.update(auth_headers(self._key_id, self._key, method, path))
-        for attempt in range(3):
+        attempts = 5 if method == "GET" else 1
+        for attempt in range(attempts):
+            if auth and attempt:  # fresh timestamp and signature for each retry
+                headers.update(auth_headers(self._key_id, self._key, method, path))
             resp = self.session.request(method, url, params=params, json=json, headers=headers, timeout=self.timeout)
-            if resp.status_code in (429, 500, 502, 503, 504) and attempt < 2 and method == "GET":
-                time.sleep(1.0 * (attempt + 1))
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < attempts - 1:
+                time.sleep(1.5 * (attempt + 1))
                 continue
             break
         self.last_response = resp
