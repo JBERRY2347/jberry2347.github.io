@@ -88,6 +88,24 @@ jobs:
           key: kalshi-state-${{ env.KALSHI_ENV }}-${{ github.run_id }}
           restore-keys: kalshi-state-${{ env.KALSHI_ENV }}-
 
+      - name: Scrub anything credential-shaped from restored state
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          dir="$(dirname "$KALSHI_STATE")"
+          mkdir -p "$dir"
+          for f in "$dir"/*.jsonl; do
+            [ -f "$f" ] || continue
+            grep -v -E 'sk-ant-|x-api-key|BEGIN [A-Z ]*PRIVATE KEY' "$f" > "$f.tmp" || true
+            mv "$f.tmp" "$f"
+          done
+          for f in "$dir"/*.json; do
+            [ -f "$f" ] || continue
+            if grep -q -E 'sk-ant-|x-api-key|BEGIN [A-Z ]*PRIVATE KEY' "$f"; then
+              echo "::warning::removed $f because it contained credential-shaped text"
+              rm -f "$f"
+            fi
+          done
+
       - name: Write private key
         if: steps.gate.outputs.enabled == 'true'
         run: |
