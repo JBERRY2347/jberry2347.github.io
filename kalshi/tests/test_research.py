@@ -74,3 +74,25 @@ def test_cache_ttl(tmp_path):
     assert ResearchCache(path, ttl_hours=1).get("T-1") is None          # too old
     assert ResearchCache(path, ttl_hours=1e9).get("T-1").yes_prob == 0.5  # huge ttl keeps it
     assert cache.get("missing") is None
+
+
+def test_estimate_records_cost_and_search_count():
+    from kalshi_trader.research import estimate_cost_usd
+    resp1 = _msg("Research.", usage=(100_000, 5_000))
+    resp1.usage.server_tool_use = SimpleNamespace(web_search_requests=4, web_fetch_requests=2)
+    fake = FakeAnthropic([resp1, _msg(EXTRACT_JSON, usage=(1_000, 200))])
+    est = Researcher(client=fake, model="claude-opus-5", effort="medium").estimate(MARKET)
+    assert est.web_searches == 6
+    assert est.cost_usd == round(estimate_cost_usd("claude-opus-5", 101_000, 5_200, 6), 4)
+    assert abs(est.cost_usd - (0.505 + 0.13 + 0.06)) < 1e-6
+    assert fake.calls[0]["output_config"]["effort"] == "medium"
+
+
+def test_cache_sums_todays_spend(tmp_path):
+    from datetime import datetime, timezone
+    cache = ResearchCache(tmp_path / "c.json", ttl_hours=12)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    cache.put(Estimate("A", 0.5, "high", True, "", "r", researched_at=now, cost_usd=1.25))
+    cache.put(Estimate("B", 0.5, "high", True, "", "r", researched_at=now, cost_usd=0.75))
+    cache.put(Estimate("C", 0.5, "high", True, "", "r", researched_at="2020-01-01T00:00:00+00:00", cost_usd=9.0))
+    assert cache.spent_today_usd() == 2.0

@@ -48,7 +48,9 @@ class AutopilotSettings:
     # research
     model: str = "claude-opus-5"
     max_research_per_pass: int = 5
-    max_searches_per_market: int = 8
+    max_searches_per_market: int = 5
+    research_effort: str = "medium"           # low | medium | high; high roughly doubles the cost
+    max_research_usd_per_day: float = 3.0     # hard cap on estimated Claude spend per UTC day; 0 disables
     research_ttl_hours: float = 12.0
     min_confidence: str = "medium"
     # trading
@@ -196,13 +198,18 @@ class Autopilot:
 
     def _researcher(self) -> Researcher:
         if self.researcher is None:
-            self.researcher = Researcher(model=self.cfg.model, max_searches=self.cfg.max_searches_per_market)
+            self.researcher = Researcher(model=self.cfg.model, max_searches=self.cfg.max_searches_per_market, effort=self.cfg.research_effort)
         return self.researcher
 
     def gather_estimates(self, markets: list[dict]) -> list[Estimate]:
         """Return fresh estimates for the top candidates, researching as needed."""
         estimates: list[Estimate] = []
         budget = self.cfg.max_research_per_pass
+        spent = self.cache.spent_today_usd()
+        cap = self.cfg.max_research_usd_per_day
+        if cap and spent >= cap:
+            log.warning("research budget: $%.2f of $%.2f spent today; no new research this pass", spent, cap)
+            budget = 0
         for m in markets:
             cached = self.cache.get(m["ticker"])
             if cached:
@@ -226,10 +233,15 @@ class Autopilot:
                 journal(self.journal_path, {"kind": "research_error", "ticker": m["ticker"], "error": detail})
                 continue
             self.cache.put(est)
+            spent += est.cost_usd
             journal(self.journal_path, {"kind": "estimate", **est.to_dict(), "title": m.get("title")})
-            log.info("%s: estimate %.0f%% (%s confidence, market %sc) %s", est.ticker, est.yes_prob * 100, est.confidence,
-                     est.market_yes_price, "" if est.should_trade else f"SKIP: {est.skip_reason}")
+            log.info("%s: estimate %.0f%% (%s confidence, market %sc) cost ~$%.2f %s", est.ticker, est.yes_prob * 100, est.confidence,
+                     est.market_yes_price, est.cost_usd, "" if est.should_trade else f"SKIP: {est.skip_reason}")
             estimates.append(est)
+            if cap and spent >= cap:
+                log.warning("research budget: ~$%.2f of $%.2f spent today; stopping research for this pass", spent, cap)
+                budget = 0
+        log.info("research spend today ~$%.2f", spent)
         return estimates
 
     def _has_liquidity(self, ticker: str) -> bool:

@@ -22,9 +22,11 @@ include_series = []
 exclude_series = []
 exclude_keywords = []
 
-model = "claude-opus-5"
-max_research_per_pass = 4         # roughly $0.50 to $2 of Claude usage per run (6 runs a day)
-max_searches_per_market = 8
+model = "claude-opus-5"           # "claude-sonnet-5" is ~40% of the price with somewhat less careful reasoning
+max_research_per_pass = 3
+max_searches_per_market = 5       # each search ~$0.01 plus the pages it reads; this is most of the cost
+research_effort = "medium"        # "high" roughly doubles the cost per market
+max_research_usd_per_day = 3.0    # hard cap on estimated Claude spend per UTC day
 research_ttl_hours = 12
 min_confidence = "medium"
 
@@ -38,4 +40,4 @@ min_balance_cents = 2500          # stop buying below $25 cash
 # wide spreads), so loosen the liquidity filters there. These never apply to prod.
 min_volume = 20
 max_spread_cents = 30
-max_research_per_pass = 3
+max_research_per_pass = 2
