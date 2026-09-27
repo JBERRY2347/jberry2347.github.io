@@ -76,6 +76,7 @@ class OrderRequest:
             "count": f"{self.count:.2f}",
             "price": f"{yes_price / 100:.4f}",
             "time_in_force": "good_till_canceled",
+            "self_trade_prevention_type": "taker_at_cross",   # required by the V2 endpoint
         }
         if self.expiration_ts is not None:
             body["expiration_time"] = datetime.fromtimestamp(self.expiration_ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
