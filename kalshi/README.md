@@ -166,8 +166,11 @@ autopilot has no edge and you should stop running it. Run it on demo long enough
 that number before switching to prod.
 
 **Cost.** Each researched market is one Claude Opus call with up to `max_searches_per_market`
-web searches plus a small extraction call, roughly $0.10 to $0.50. With the default 5 markets
-per pass and a 12 hour cache, expect a few dollars a day.
+web searches (and the pages they read) plus a small extraction call. Measured: about $1.25 per
+market at `research_effort = "high"` with 8 searches, roughly half at `"medium"` with 5.
+`max_research_usd_per_day` is a hard cap on estimated spend per UTC day; once reached, the bot
+keeps trading on cached estimates but researches nothing new until tomorrow. Every estimate in
+the journal carries its own `cost_usd`.
 
 **What the prompt asks for.** Claude is told to treat the current market price as a strong
 prior, to only diverge when it found specific evidence, and to say when it couldn't find

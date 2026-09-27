@@ -166,3 +166,23 @@ def test_empty_book_skips_research(settings, fake_session, tmp_path):
                       tmp_path / "j.jsonl", researcher=researcher)
     pilot.run_once(lambda o: {"order_id": "x"})
     assert researcher.asked == ["B-1"]
+
+
+def test_daily_research_budget_stops_new_research(settings, fake_session, tmp_path):
+    from datetime import datetime, timezone
+    fake_session.route("GET", "/markets", {"markets": [market("A-1", volume=3000), market("B-1", volume=2000)], "cursor": ""})
+    fake_session.route("GET", "/portfolio/balance", {"balance": 50_000})
+    fake_session.route("GET", "/portfolio/positions", {"market_positions": []})
+    fake_session.route("GET", "/portfolio/orders", {"orders": [], "cursor": ""})
+    for t in ("A-1", "B-1"):
+        fake_session.route("GET", f"/markets/{t}/orderbook", {"orderbook": {"yes": [[40, 5]], "no": [[50, 5]]}})
+    client = KalshiClient(settings, session=fake_session)
+    cache = ResearchCache(tmp_path / "c.json", 12)
+    cache.put(Estimate("OLD", 0.5, "high", True, "", "r", researched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"), cost_usd=2.9))
+    researcher = ScriptedResearcher({
+        "A-1": Estimate("A-1", 0.5, "high", True, "", "r", cost_usd=0.5),
+        "B-1": Estimate("B-1", 0.5, "high", True, "", "r", cost_usd=0.5),
+    })
+    cfg = AutopilotSettings(min_volume=500, max_research_per_pass=5, max_research_usd_per_day=3.0)
+    Autopilot(client, cfg, cache, tmp_path / "j.jsonl", researcher=researcher).run_once(lambda o: {})
+    assert researcher.asked == ["A-1"]          # $2.90 + $0.50 crosses the $3 cap; B-1 is not researched

@@ -27,6 +27,21 @@ log = logging.getLogger("kalshi.research")
 
 DEFAULT_MODEL = "claude-opus-5"
 
+# USD per million tokens (input, output) and per web search. Used only to estimate spend
+# for the daily research budget; Anthropic's bill is authoritative.
+MODEL_PRICES = {
+    "claude-opus-5": (5.00, 25.00),
+    "claude-opus-4-8": (5.00, 25.00),
+    "claude-sonnet-5": (2.00, 10.00),
+    "claude-haiku-4-5": (1.00, 5.00),
+}
+WEB_SEARCH_PRICE = 0.01
+
+
+def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int, web_searches: int) -> float:
+    inp, out = MODEL_PRICES.get(model, (5.00, 25.00))
+    return input_tokens / 1e6 * inp + output_tokens / 1e6 * out + web_searches * WEB_SEARCH_PRICE
+
 RESEARCH_SYSTEM = """You are a careful forecaster helping estimate the probability of a real-world event that trades as a binary contract on the Kalshi prediction market.
 
 Your job is to research the question and produce a well-calibrated probability that the YES outcome occurs by the market's close time. Work like a superforecaster:
@@ -73,6 +88,8 @@ class Estimate:
     model: str = DEFAULT_MODEL
     input_tokens: int = 0
     output_tokens: int = 0
+    web_searches: int = 0
+    cost_usd: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -133,13 +150,18 @@ class Researcher:
 
     # ------------------------------------------------------------ research
 
-    def _research_text(self, market: dict) -> tuple[str, int, int]:
+    @staticmethod
+    def _searches(resp) -> int:
+        stu = getattr(getattr(resp, "usage", None), "server_tool_use", None)
+        return int(getattr(stu, "web_search_requests", 0) or 0) + int(getattr(stu, "web_fetch_requests", 0) or 0)
+
+    def _research_text(self, market: dict) -> tuple[str, int, int, int]:
         tools = [
             {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches},
             {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": self.max_searches},
         ]
         messages: list[dict] = [{"role": "user", "content": "Research this Kalshi market and estimate the probability of YES.\n\n" + describe_market(market)}]
-        in_tok = out_tok = 0
+        in_tok = out_tok = searches = 0
         for _ in range(6):  # pause_turn continuations
             resp = self.client.messages.create(
                 model=self.model,
@@ -152,13 +174,14 @@ class Researcher:
             )
             in_tok += getattr(resp.usage, "input_tokens", 0) or 0
             out_tok += getattr(resp.usage, "output_tokens", 0) or 0
+            searches += self._searches(resp)
             if resp.stop_reason == "pause_turn":
                 messages.append({"role": "assistant", "content": resp.content})
                 continue
             if resp.stop_reason == "refusal":
                 raise ResearchRefused(getattr(getattr(resp, "stop_details", None), "explanation", "") or "refused")
             text = "\n".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-            return text, in_tok, out_tok
+            return text, in_tok, out_tok, searches
         raise ResearchFailed("research did not finish after repeated pause_turn continuations")
 
     def _extract(self, market: dict, research_text: str) -> tuple[dict, int, int]:
@@ -175,16 +198,17 @@ class Researcher:
         return json.loads(text), getattr(resp.usage, "input_tokens", 0) or 0, getattr(resp.usage, "output_tokens", 0) or 0
 
     def estimate(self, market: dict) -> Estimate:
-        text, i1, o1 = self._research_text(market)
+        text, i1, o1, searches = self._research_text(market)
         if not text.strip():
             raise ResearchFailed("empty research response")
         data, i2, o2 = self._extract(market, text)
         prob = min(max(float(data["yes_prob"]), 0.0), 1.0)
+        cost = estimate_cost_usd(self.model, i1 + i2, o1 + o2, searches)
         return Estimate(
             ticker=market["ticker"], yes_prob=prob, confidence=data["confidence"], should_trade=bool(data["should_trade"]),
             skip_reason=data.get("skip_reason", ""), reasoning=data.get("reasoning", ""), key_sources=list(data.get("key_sources", [])),
             market_yes_price=mid_price(market), researched_at=_now_iso(), model=self.model,
-            input_tokens=i1 + i2, output_tokens=o1 + o2,
+            input_tokens=i1 + i2, output_tokens=o1 + o2, web_searches=searches, cost_usd=round(cost, 4),
         )
 
 
@@ -220,6 +244,11 @@ class ResearchCache:
 
     def all(self) -> list[Estimate]:
         return [Estimate.from_dict(d) for d in self._data.values()]
+
+    def spent_today_usd(self) -> float:
+        """Estimated research spend on estimates made today (UTC). Failed calls are not counted."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return sum(float(d.get("cost_usd") or 0) for d in self._data.values() if str(d.get("researched_at", "")).startswith(today))
 
 
 def journal(path: Path, record: dict) -> None:
