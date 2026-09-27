@@ -1,0 +1,8 @@
+{
+  "edge_cents": 5,
+  "max_contracts": 10,
+  "markets": {
+    "REPLACE-WITH-A-TICKER": { "yes_prob": 0.62 },
+    "ANOTHER-TICKER": { "yes_prob": 0.15, "edge_cents": 8, "max_contracts": 5 }
+  }
+}

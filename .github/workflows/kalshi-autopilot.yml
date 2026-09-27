@@ -1,0 +1,93 @@
+# Runs the Kalshi autopilot on a schedule so it trades without your laptop being on.
+#
+# It does nothing until you opt in:
+#   Settings -> Secrets and variables -> Actions
+#     Variables:  KALSHI_AUTOPILOT_ENABLED = true
+#                 KALSHI_ENV               = demo   (or prod, once you trust it)
+#     Secrets:    KALSHI_API_KEY_ID        = the key id from Kalshi's API Keys page
+#                 KALSHI_PRIVATE_KEY_PEM   = the full contents of the .pem file
+#                 ANTHROPIC_API_KEY        = key from console.anthropic.com
+#
+# Each run does one autopilot pass. The research cache and journal are kept
+# between runs with actions/cache so markets are not re-researched every hour.
+
+name: Kalshi autopilot
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"    # every 4 hours; GitHub may delay scheduled runs by a few minutes
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Research and log, but place no orders"
+        type: boolean
+        default: false
+
+concurrency:
+  group: kalshi-autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  trade:
+    if: vars.KALSHI_AUTOPILOT_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      KALSHI_ENV: ${{ vars.KALSHI_ENV || 'demo' }}
+      KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      KALSHI_PRIVATE_KEY: ${{ runner.temp }}/kalshi.pem
+      KALSHI_CONFIG: ${{ github.workspace }}/kalshi/autopilot.config.toml
+      KALSHI_STATE: ${{ github.workspace }}/.kalshi-state/state.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: kalshi/requirements.txt
+
+      - name: Install
+        run: pip install -r kalshi/requirements.txt
+
+      - name: Restore research cache and journal
+        uses: actions/cache/restore@v4
+        with:
+          path: .kalshi-state
+          key: kalshi-state-${{ env.KALSHI_ENV }}-${{ github.run_id }}
+          restore-keys: kalshi-state-${{ env.KALSHI_ENV }}-
+
+      - name: Write private key
+        run: |
+          umask 077
+          printf '%s\n' "$PEM" > "$KALSHI_PRIVATE_KEY"
+        env:
+          PEM: ${{ secrets.KALSHI_PRIVATE_KEY_PEM }}
+
+      - name: Run one autopilot pass
+        working-directory: kalshi
+        run: |
+          FLAGS="-y"
+          if [ "$KALSHI_ENV" = "prod" ]; then FLAGS="$FLAGS --live"; fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
+          python -m kalshi_trader $FLAGS autopilot --once
+
+      - name: Save research cache and journal
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .kalshi-state
+          key: kalshi-state-${{ env.KALSHI_ENV }}-${{ github.run_id }}
+
+      - name: Upload journal
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalshi-journal-${{ github.run_id }}
+          path: .kalshi-state/journal-*.jsonl
+          if-no-files-found: ignore
+          retention-days: 90
