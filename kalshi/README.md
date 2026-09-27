@@ -215,9 +215,10 @@ Run the tests with `python -m pytest` from this folder.
 
 ## Notes and limits
 
-* Built against Kalshi trade API v2 (`https://api.elections.kalshi.com/trade-api/v2`, demo at
-  `https://demo-api.kalshi.co/trade-api/v2`). If Kalshi renames a field the tables may show
-  `-`; use `--json` to see the raw response.
+* Built against Kalshi trade API v2 (`https://external-api.kalshi.com/trade-api/v2`, demo at
+  `https://external-api.demo.kalshi.co/trade-api/v2`). Kalshi has moved these hosts before;
+  if they move again, set `KALSHI_HOST` to the new one. If Kalshi renames a field the tables
+  may show `-`; use `--json` to see the raw response.
 * Kalshi rate-limits API keys. The client retries 429s a couple of times; keep the bot
   interval at 30 seconds or more.
 * This is not a market-making or arbitrage bot and has no view of its own. If you want it to

@@ -10,6 +10,7 @@ Environment variables:
     KALSHI_PRIVATE_KEY      path to the PEM private key file
     KALSHI_CONFIG           path to a TOML config file (default ~/.config/kalshi-trader/config.toml)
     KALSHI_STATE            path of the state file; the research cache and journal live beside it
+    KALSHI_HOST             override the API host, e.g. https://external-api.kalshi.com
     ANTHROPIC_API_KEY       needed by the autopilot's research step (read by the Anthropic SDK)
 """
 
@@ -20,9 +21,11 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Current hosts per docs.kalshi.com (September 2026). Kalshi has moved these
+# before; KALSHI_HOST overrides whichever one KALSHI_ENV selects.
 HOSTS = {
-    "demo": "https://demo-api.kalshi.co",
-    "prod": "https://api.elections.kalshi.com",
+    "demo": "https://external-api.demo.kalshi.co",
+    "prod": "https://external-api.kalshi.com",
 }
 
 DEFAULT_CONFIG_PATH = Path("~/.config/kalshi-trader/config.toml")
@@ -70,12 +73,13 @@ class Settings:
     def journal_path(self) -> Path:
         return self.state_dir / f"journal-{self.env}.jsonl"
 
+    host_override: str | None = None
+
     @property
     def host(self) -> str:
-        try:
-            return HOSTS[self.env]
-        except KeyError:
-            raise ValueError(f"unknown environment {self.env!r}; use 'demo' or 'prod'") from None
+        if self.env not in HOSTS:
+            raise ValueError(f"unknown environment {self.env!r}; use 'demo' or 'prod'")
+        return (self.host_override or HOSTS[self.env]).rstrip("/")
 
     @property
     def is_live(self) -> bool:
@@ -109,6 +113,7 @@ def load_settings(config_path: str | Path | None = None, env_override: str | Non
         risk=RiskLimits.from_mapping(file_cfg.get("risk", {})),
         state_path=Path(os.environ.get("KALSHI_STATE") or file_cfg.get("state_path", DEFAULT_STATE_PATH)).expanduser(),
         autopilot=dict(file_cfg.get("autopilot", {})),
+        host_override=os.environ.get("KALSHI_HOST") or file_cfg.get("host"),
     )
     settings.host  # validate env early
     return settings
