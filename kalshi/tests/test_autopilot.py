@@ -114,3 +114,13 @@ def test_run_once_stops_below_min_balance(settings, fake_session, tmp_path):
     pilot = Autopilot(client, cfg, ResearchCache(tmp_path / "c.json", 1), tmp_path / "j.jsonl", researcher=researcher)
     assert pilot.run_once(lambda o: {"x": 1}) == []
     assert not [c for c in fake_session.calls if "orderbook" in c["path"]]
+
+
+def test_select_markets_reports_reasons_and_reads_dollar_prices():
+    cfg = AutopilotSettings(min_volume=500)
+    ms = [market("A-1", volume=10), market("B-1", hours=1), {**market("C-1"), "yes_bid": None, "yes_ask": None,
+          "yes_bid_dollars": "0.40", "yes_ask_dollars": "0.44"}]
+    stats = {}
+    kept = select_markets(ms, cfg, now=NOW, stats=stats)
+    assert [m["ticker"] for m in kept] == ["C-1"]
+    assert stats == {"volume below min_volume": 1, "closes too soon": 1}
