@@ -7,7 +7,7 @@ from kalshi_trader.autopilot import Autopilot, AutopilotSettings, account_exposu
 from kalshi_trader.client import KalshiClient
 from kalshi_trader.research import Estimate, ResearchCache, ResearchFailed
 
-NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc).replace(microsecond=0)   # the autopilot uses the real clock, so the fixtures must too
 
 
 def market(ticker, hours=48, volume=1000, bid=40, ask=44, status="open", title="Something", series=None):

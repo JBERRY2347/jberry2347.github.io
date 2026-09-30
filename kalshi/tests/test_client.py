@@ -101,3 +101,35 @@ def test_orderbook_accepts_both_top_level_keys(settings, fake_session):
     fake_session.route("GET", "/markets/C/orderbook", {"something_else": 1})
     with pytest.raises(KalshiError):
         c.orderbook("C")
+
+
+def test_create_order_retries_server_errors_with_same_client_order_id(settings, fake_session, monkeypatch):
+    monkeypatch.setattr("kalshi_trader.client.time.sleep", lambda s: None)
+    answers = iter([(500, {"error": {"code": "internal_server_error"}}), (200, {"order": {"order_id": "o1", "status": "resting"}})])
+    original = fake_session.request
+
+    def request(method, url, **kw):
+        if method == "POST":
+            status, body = next(answers)
+            fake_session.calls.append({"method": method, "path": url, "json": kw.get("json"), "headers": kw.get("headers")})
+            from tests.conftest import FakeResponse
+            return FakeResponse(status, body)
+        return original(method, url, **kw)
+
+    fake_session.request = request
+    c = KalshiClient(settings, session=fake_session)
+    assert c.create_order(OrderRequest("T", "buy", "no", 10, 56, client_order_id="fixed"))["order_id"] == "o1"
+    posts = [x for x in fake_session.calls if x["method"] == "POST"]
+    assert len(posts) == 2
+    assert posts[0]["json"] == posts[1]["json"]                       # identical body, Kalshi de-duplicates on client_order_id
+    assert posts[0]["headers"]["KALSHI-ACCESS-TIMESTAMP"] <= posts[1]["headers"]["KALSHI-ACCESS-TIMESTAMP"]
+
+
+def test_create_order_gives_up_after_three_server_errors(settings, fake_session, monkeypatch):
+    monkeypatch.setattr("kalshi_trader.client.time.sleep", lambda s: None)
+    fake_session.route("POST", "/portfolio/events/orders", {"error": {"code": "internal_server_error"}}, status=500)
+    c = KalshiClient(settings, session=fake_session)
+    with pytest.raises(KalshiError) as ei:
+        c.create_order(OrderRequest("T", "buy", "yes", 1, 50))
+    assert ei.value.status == 500
+    assert len(fake_session.calls) == 3
