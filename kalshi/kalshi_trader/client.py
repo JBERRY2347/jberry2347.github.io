@@ -125,14 +125,16 @@ class KalshiClient:
 
     # ------------------------------------------------------------------ core
 
-    def _request(self, method: str, path: str, *, params: dict | None = None, json: dict | None = None, auth: bool = True) -> Any:
+    def _request(self, method: str, path: str, *, params: dict | None = None, json: dict | None = None, auth: bool = True,
+                 idempotent: bool = False) -> Any:
+        """One API call. GETs (and writes marked ``idempotent``) are retried on 429/5xx with fresh signatures."""
         url = self.base_url + path
         headers = {"Accept": "application/json"}
         if auth:
             if not self._key or not self._key_id:
                 self.settings.require_credentials()
             headers.update(auth_headers(self._key_id, self._key, method, path))
-        attempts = 5 if method == "GET" else 1
+        attempts = 5 if method == "GET" else (3 if idempotent else 1)
         for attempt in range(attempts):
             if auth and attempt:  # fresh timestamp and signature for each retry
                 headers.update(auth_headers(self._key_id, self._key, method, path))
@@ -227,8 +229,12 @@ class KalshiClient:
         return list(self._paginate("/portfolio/fills", "fills", params, max_pages=1))
 
     def create_order(self, order: OrderRequest) -> dict:
-        """Place an order via the V2 endpoint (the legacy /portfolio/orders returns 410)."""
-        data = self._request("POST", "/portfolio/events/orders", json=order.to_v2_body())
+        """Place an order via the V2 endpoint (the legacy /portfolio/orders returns 410).
+
+        The body is built once so every retry carries the same client_order_id, which Kalshi
+        de-duplicates; a 5xx that actually went through therefore cannot double-fill.
+        """
+        data = self._request("POST", "/portfolio/events/orders", json=order.to_v2_body(), idempotent=True)
         return data.get("order", data) if isinstance(data, dict) else {}
 
     def cancel_order(self, order_id: str) -> dict:
