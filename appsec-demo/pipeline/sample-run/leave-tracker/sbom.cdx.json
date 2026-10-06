@@ -1,0 +1,34 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "Acme Leave Tracker"
+    },
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "appsec-demo-pipeline",
+          "version": "1.0.0"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "requests",
+      "version": "2.25.1",
+      "purl": "pkg:pypi/requests@2.25.1"
+    },
+    {
+      "type": "library",
+      "name": "gunicorn",
+      "version": "22.0.0",
+      "purl": "pkg:pypi/gunicorn@22.0.0"
+    }
+  ]
+}

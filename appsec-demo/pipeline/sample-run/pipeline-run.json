@@ -1,0 +1,872 @@
+{
+  "pipeline": {
+    "name": "appsec-demo-pipeline",
+    "version": "1.0.0",
+    "policy": {
+      "name": "Acme AppSec release gate (demo)",
+      "fail_on": [
+        "critical",
+        "high"
+      ],
+      "max_medium": 5,
+      "notes": "Critical and high findings block the release unless a dated waiver exists in the app's appsec.json. More than max_medium medium findings also blocks. Manual-review findings are tracked in the review report, not by the pipeline."
+    }
+  },
+  "run": {
+    "id": "20261006-173842",
+    "finished": "2026-10-06 17:38 UTC",
+    "commit": "9a4fe57"
+  },
+  "apps": [
+    {
+      "slug": "inventory-api",
+      "name": "Acme Inventory API",
+      "tier": "Tier 3 (standard)",
+      "data_classification": "Internal (stock levels, no personal data)",
+      "expected_gate": "pass",
+      "gate": "pass",
+      "gate_reasons": [],
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0,
+        "info": 0
+      },
+      "stages": [
+        {
+          "key": "inventory",
+          "label": "Inventory",
+          "description": "Enumerate files, languages and manifests",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "files": 5,
+            "lines_of_code": 103,
+            "types": {
+              "Dockerfile": 1,
+              ".py": 1,
+              ".json": 1,
+              ".tf": 1,
+              ".txt": 1
+            }
+          }
+        },
+        {
+          "key": "secrets",
+          "label": "Secret scan",
+          "description": "Regex rules for keys, tokens and credentials (gitleaks-style)",
+          "status": "pass",
+          "duration_ms": 1,
+          "findings": 0,
+          "info": {
+            "rules": 4
+          }
+        },
+        {
+          "key": "sast",
+          "label": "SAST",
+          "description": "AST rules for injection, crypto and misconfiguration (Semgrep/CodeQL-style)",
+          "status": "pass",
+          "duration_ms": 3,
+          "findings": 0,
+          "info": {
+            "python_files": 1,
+            "rules": 9
+          }
+        },
+        {
+          "key": "sca",
+          "label": "Dependency scan",
+          "description": "Pinned packages vs. advisory data (pip-audit/Dependabot-style)",
+          "status": "pass",
+          "duration_ms": 1,
+          "findings": 0,
+          "info": {
+            "packages": 3,
+            "advisories_loaded": 4
+          }
+        },
+        {
+          "key": "iac",
+          "label": "IaC scan",
+          "description": "Terraform misconfiguration (Checkov/tfsec-style)",
+          "status": "pass",
+          "duration_ms": 1,
+          "findings": 0,
+          "info": {
+            "resources": 3
+          }
+        },
+        {
+          "key": "container",
+          "label": "Container scan",
+          "description": "Dockerfile hygiene (Hadolint/Trivy-style)",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "dockerfiles": 1
+          }
+        },
+        {
+          "key": "sbom",
+          "label": "SBOM",
+          "description": "CycloneDX 1.5 bill of materials (Syft-style)",
+          "status": "pass",
+          "duration_ms": 1,
+          "findings": 0,
+          "info": {
+            "components": 3,
+            "file": "sbom.cdx.json"
+          }
+        },
+        {
+          "key": "dast",
+          "label": "DAST",
+          "description": "Starts the app and probes it over HTTP (ZAP-style)",
+          "status": "pass",
+          "duration_ms": 136,
+          "findings": 0,
+          "info": {
+            "probes": 6,
+            "target": "ephemeral localhost instance"
+          }
+        },
+        {
+          "key": "gate",
+          "label": "Release gate",
+          "description": "Applies policy.json and dated waivers",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "result": "pass",
+            "reasons": [],
+            "waived": 0,
+            "policy": "Acme AppSec release gate (demo)"
+          }
+        }
+      ],
+      "findings": []
+    },
+    {
+      "slug": "leave-tracker",
+      "name": "Acme Leave Tracker",
+      "tier": "Tier 2 (important)",
+      "data_classification": "Confidential (employee PII, health-related notes)",
+      "expected_gate": "pass",
+      "gate": "pass",
+      "gate_reasons": [],
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 4,
+        "low": 2,
+        "info": 0
+      },
+      "stages": [
+        {
+          "key": "inventory",
+          "label": "Inventory",
+          "description": "Enumerate files, languages and manifests",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "files": 5,
+            "lines_of_code": 108,
+            "types": {
+              "Dockerfile": 1,
+              ".py": 1,
+              ".json": 1,
+              ".tf": 1,
+              ".txt": 1
+            }
+          }
+        },
+        {
+          "key": "secrets",
+          "label": "Secret scan",
+          "description": "Regex rules for keys, tokens and credentials (gitleaks-style)",
+          "status": "pass",
+          "duration_ms": 1,
+          "findings": 0,
+          "info": {
+            "rules": 4
+          }
+        },
+        {
+          "key": "sast",
+          "label": "SAST",
+          "description": "AST rules for injection, crypto and misconfiguration (Semgrep/CodeQL-style)",
+          "status": "warn",
+          "duration_ms": 3,
+          "findings": 3,
+          "info": {
+            "python_files": 1,
+            "rules": 9
+          }
+        },
+        {
+          "key": "sca",
+          "label": "Dependency scan",
+          "description": "Pinned packages vs. advisory data (pip-audit/Dependabot-style)",
+          "status": "warn",
+          "duration_ms": 0,
+          "findings": 1,
+          "info": {
+            "packages": 2,
+            "advisories_loaded": 4
+          }
+        },
+        {
+          "key": "iac",
+          "label": "IaC scan",
+          "description": "Terraform misconfiguration (Checkov/tfsec-style)",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "resources": 3
+          }
+        },
+        {
+          "key": "container",
+          "label": "Container scan",
+          "description": "Dockerfile hygiene (Hadolint/Trivy-style)",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 1,
+          "info": {
+            "dockerfiles": 1
+          }
+        },
+        {
+          "key": "sbom",
+          "label": "SBOM",
+          "description": "CycloneDX 1.5 bill of materials (Syft-style)",
+          "status": "pass",
+          "duration_ms": 1,
+          "findings": 0,
+          "info": {
+            "components": 2,
+            "file": "sbom.cdx.json"
+          }
+        },
+        {
+          "key": "dast",
+          "label": "DAST",
+          "description": "Starts the app and probes it over HTTP (ZAP-style)",
+          "status": "pass",
+          "duration_ms": 110,
+          "findings": 1,
+          "info": {
+            "probes": 6,
+            "target": "ephemeral localhost instance"
+          }
+        },
+        {
+          "key": "gate",
+          "label": "Release gate",
+          "description": "Applies policy.json and dated waivers",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "result": "pass",
+            "reasons": [],
+            "waived": 0,
+            "policy": "Acme AppSec release gate (demo)"
+          }
+        }
+      ],
+      "findings": [
+        {
+          "id": "SAST-INSECURE-RANDOM:app.py:27",
+          "rule": "SAST-INSECURE-RANDOM",
+          "stage": "sast",
+          "severity": "medium",
+          "title": "Non-cryptographic RNG used for a token or secret",
+          "file": "app.py",
+          "line": 27,
+          "cwe": "CWE-338",
+          "owasp": "A02",
+          "detail": "random.choice inside new_reset_token()",
+          "remediation": "Use the secrets module (secrets.token_urlsafe).",
+          "waived": false
+        },
+        {
+          "id": "SAST-VERBOSE-ERRORS:app.py:67",
+          "rule": "SAST-VERBOSE-ERRORS",
+          "stage": "sast",
+          "severity": "medium",
+          "title": "Exception detail returned to the client",
+          "file": "app.py",
+          "line": 67,
+          "cwe": "CWE-209",
+          "owasp": "A05",
+          "detail": "exception text returned in the response",
+          "remediation": "Log the detail server-side and return a generic error with a correlation id.",
+          "waived": false
+        },
+        {
+          "id": "SAST-COOKIE-FLAGS:app.py:71",
+          "rule": "SAST-COOKIE-FLAGS",
+          "stage": "sast",
+          "severity": "medium",
+          "title": "Session cookie missing Secure and/or HttpOnly",
+          "file": "app.py",
+          "line": 71,
+          "cwe": "CWE-614",
+          "owasp": "A05",
+          "detail": "missing Secure, HttpOnly",
+          "remediation": "Set Secure; HttpOnly; SameSite=Lax (or Strict) on session cookies.",
+          "waived": false
+        },
+        {
+          "id": "CVE-2023-32681:requirements.txt",
+          "rule": "SCA-VULNERABLE-DEPENDENCY",
+          "stage": "sca",
+          "severity": "medium",
+          "title": "Dependency with a known vulnerability",
+          "file": "requirements.txt",
+          "line": 1,
+          "cwe": "CWE-200",
+          "owasp": "A06",
+          "detail": "requests 2.25.1: Proxy-Authorization header leaked to the destination server on HTTPS redirects. (CVE-2023-32681). Fixed in 2.31.0.",
+          "remediation": "Upgrade to the fixed version.",
+          "waived": false,
+          "advisory": "CVE-2023-32681",
+          "package": "requests",
+          "version": "2.25.1",
+          "fixed": "2.31.0"
+        },
+        {
+          "id": "DOCKER-NO-HEALTHCHECK:Dockerfile:1",
+          "rule": "DOCKER-NO-HEALTHCHECK",
+          "stage": "container",
+          "severity": "low",
+          "title": "No HEALTHCHECK defined",
+          "file": "Dockerfile",
+          "line": 1,
+          "cwe": "CWE-693",
+          "owasp": "A05",
+          "detail": "",
+          "remediation": "Add a HEALTHCHECK so the orchestrator can restart unhealthy containers.",
+          "waived": false
+        },
+        {
+          "id": "DAST-MISSING-HEADERS:GET /health:0",
+          "rule": "DAST-MISSING-HEADERS",
+          "stage": "dast",
+          "severity": "low",
+          "title": "Security response headers missing",
+          "file": "GET /health",
+          "line": 0,
+          "cwe": "CWE-693",
+          "owasp": "A05",
+          "detail": "missing: X-Frame-Options, Content-Security-Policy",
+          "remediation": "Send X-Content-Type-Options, X-Frame-Options and a Content-Security-Policy.",
+          "waived": false
+        }
+      ]
+    },
+    {
+      "slug": "payments-portal",
+      "name": "Acme Payments Portal",
+      "tier": "Tier 1 (critical)",
+      "data_classification": "Restricted (cardholder data, PII)",
+      "expected_gate": "fail",
+      "gate": "fail",
+      "gate_reasons": [
+        "6 critical finding(s)",
+        "8 high finding(s)",
+        "7 medium findings exceed the limit of 5"
+      ],
+      "counts": {
+        "critical": 6,
+        "high": 8,
+        "medium": 7,
+        "low": 3,
+        "info": 0
+      },
+      "stages": [
+        {
+          "key": "inventory",
+          "label": "Inventory",
+          "description": "Enumerate files, languages and manifests",
+          "status": "pass",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "files": 6,
+            "lines_of_code": 122,
+            "types": {
+              "Dockerfile": 1,
+              ".py": 1,
+              ".json": 1,
+              ".csv": 1,
+              ".tf": 1,
+              ".txt": 1
+            }
+          }
+        },
+        {
+          "key": "secrets",
+          "label": "Secret scan",
+          "description": "Regex rules for keys, tokens and credentials (gitleaks-style)",
+          "status": "warn",
+          "duration_ms": 1,
+          "findings": 3,
+          "info": {
+            "rules": 4
+          }
+        },
+        {
+          "key": "sast",
+          "label": "SAST",
+          "description": "AST rules for injection, crypto and misconfiguration (Semgrep/CodeQL-style)",
+          "status": "warn",
+          "duration_ms": 4,
+          "findings": 7,
+          "info": {
+            "python_files": 1,
+            "rules": 9
+          }
+        },
+        {
+          "key": "sca",
+          "label": "Dependency scan",
+          "description": "Pinned packages vs. advisory data (pip-audit/Dependabot-style)",
+          "status": "warn",
+          "duration_ms": 0,
+          "findings": 4,
+          "info": {
+            "packages": 3,
+            "advisories_loaded": 4
+          }
+        },
+        {
+          "key": "iac",
+          "label": "IaC scan",
+          "description": "Terraform misconfiguration (Checkov/tfsec-style)",
+          "status": "warn",
+          "duration_ms": 1,
+          "findings": 3,
+          "info": {
+            "resources": 3
+          }
+        },
+        {
+          "key": "container",
+          "label": "Container scan",
+          "description": "Dockerfile hygiene (Hadolint/Trivy-style)",
+          "status": "warn",
+          "duration_ms": 0,
+          "findings": 3,
+          "info": {
+            "dockerfiles": 1
+          }
+        },
+        {
+          "key": "sbom",
+          "label": "SBOM",
+          "description": "CycloneDX 1.5 bill of materials (Syft-style)",
+          "status": "pass",
+          "duration_ms": 1,
+          "findings": 0,
+          "info": {
+            "components": 3,
+            "file": "sbom.cdx.json"
+          }
+        },
+        {
+          "key": "dast",
+          "label": "DAST",
+          "description": "Starts the app and probes it over HTTP (ZAP-style)",
+          "status": "warn",
+          "duration_ms": 109,
+          "findings": 4,
+          "info": {
+            "probes": 6,
+            "target": "ephemeral localhost instance"
+          }
+        },
+        {
+          "key": "gate",
+          "label": "Release gate",
+          "description": "Applies policy.json and dated waivers",
+          "status": "fail",
+          "duration_ms": 0,
+          "findings": 0,
+          "info": {
+            "result": "fail",
+            "reasons": [
+              "6 critical finding(s)",
+              "8 high finding(s)",
+              "7 medium findings exceed the limit of 5"
+            ],
+            "waived": 0,
+            "policy": "Acme AppSec release gate (demo)"
+          }
+        }
+      ],
+      "findings": [
+        {
+          "id": "DAST-SQLI:GET /search:0",
+          "rule": "DAST-SQLI",
+          "stage": "dast",
+          "severity": "critical",
+          "title": "SQL injection confirmed against the running app",
+          "file": "GET /search",
+          "line": 0,
+          "cwe": "CWE-89",
+          "owasp": "A03",
+          "detail": "parameter 'q': a lone quote produced a database error",
+          "remediation": "Use parameterised queries.",
+          "waived": false
+        },
+        {
+          "id": "SAST-SQLI:app.py:30",
+          "rule": "SAST-SQLI",
+          "stage": "sast",
+          "severity": "critical",
+          "title": "SQL built by string formatting",
+          "file": "app.py",
+          "line": 30,
+          "cwe": "CWE-89",
+          "owasp": "A03",
+          "detail": "query assembled with string formatting",
+          "remediation": "Use parameterised queries (placeholders) for every value.",
+          "waived": false
+        },
+        {
+          "id": "SAST-CMDI:app.py:59",
+          "rule": "SAST-CMDI",
+          "stage": "sast",
+          "severity": "critical",
+          "title": "OS command built from input",
+          "file": "app.py",
+          "line": 59,
+          "cwe": "CWE-78",
+          "owasp": "A03",
+          "detail": "os.system with a non-constant command",
+          "remediation": "Avoid the shell; call subprocess with an argument list and validate the host against an allow-list.",
+          "waived": false
+        },
+        {
+          "id": "CVE-2020-14343:requirements.txt",
+          "rule": "SCA-VULNERABLE-DEPENDENCY",
+          "stage": "sca",
+          "severity": "critical",
+          "title": "Dependency with a known vulnerability",
+          "file": "requirements.txt",
+          "line": 1,
+          "cwe": "CWE-20",
+          "owasp": "A06",
+          "detail": "pyyaml 5.3: Arbitrary code execution via yaml.full_load / FullLoader on untrusted input. (CVE-2020-14343). Fixed in 5.4.",
+          "remediation": "Upgrade to the fixed version.",
+          "waived": false,
+          "advisory": "CVE-2020-14343",
+          "package": "pyyaml",
+          "version": "5.3",
+          "fixed": "5.4"
+        },
+        {
+          "id": "SEC-AWS-ACCESS-KEY:app.py:14",
+          "rule": "SEC-AWS-ACCESS-KEY",
+          "stage": "secrets",
+          "severity": "critical",
+          "title": "AWS access key id committed to source",
+          "file": "app.py",
+          "line": 14,
+          "cwe": "CWE-798",
+          "owasp": "A07",
+          "detail": "value redacted",
+          "remediation": "Revoke the key, move to a secrets manager or an IAM role, rewrite history.",
+          "waived": false
+        },
+        {
+          "id": "SEC-AWS-SECRET:app.py:15",
+          "rule": "SEC-AWS-SECRET",
+          "stage": "secrets",
+          "severity": "critical",
+          "title": "AWS secret access key committed to source",
+          "file": "app.py",
+          "line": 15,
+          "cwe": "CWE-798",
+          "owasp": "A07",
+          "detail": "value redacted",
+          "remediation": "Revoke the key, move to a secrets manager or an IAM role, rewrite history.",
+          "waived": false
+        },
+        {
+          "id": "DAST-UNAUTH-ACCESS:GET /admin:0",
+          "rule": "DAST-UNAUTH-ACCESS",
+          "stage": "dast",
+          "severity": "high",
+          "title": "Sensitive endpoint reachable without authentication",
+          "file": "GET /admin",
+          "line": 0,
+          "cwe": "CWE-306",
+          "owasp": "A01",
+          "detail": "HTTP 200 with no credentials",
+          "remediation": "Require authentication and role checks on every non-public route.",
+          "waived": false
+        },
+        {
+          "id": "DAST-PATH-TRAVERSAL:GET /download:0",
+          "rule": "DAST-PATH-TRAVERSAL",
+          "stage": "dast",
+          "severity": "high",
+          "title": "Path traversal confirmed against the running app",
+          "file": "GET /download",
+          "line": 0,
+          "cwe": "CWE-22",
+          "owasp": "A01",
+          "detail": "parameter 'file' returned file content for ../../../../../../../../../../etc/passwd",
+          "remediation": "Contain file access to an allow-listed directory.",
+          "waived": false
+        },
+        {
+          "id": "IAC-S3-PUBLIC-ACL:infra/main.tf:1",
+          "rule": "IAC-S3-PUBLIC-ACL",
+          "stage": "iac",
+          "severity": "high",
+          "title": "S3 bucket has a public ACL",
+          "file": "infra/main.tf",
+          "line": 1,
+          "cwe": "CWE-732",
+          "owasp": "A05",
+          "detail": "aws_s3_bucket.exports",
+          "remediation": "Remove the public ACL and add an aws_s3_bucket_public_access_block.",
+          "waived": false
+        },
+        {
+          "id": "IAC-SG-OPEN-ADMIN-PORT:infra/main.tf:10",
+          "rule": "IAC-SG-OPEN-ADMIN-PORT",
+          "stage": "iac",
+          "severity": "high",
+          "title": "Admin port (SSH/RDP) open to 0.0.0.0/0",
+          "file": "infra/main.tf",
+          "line": 10,
+          "cwe": "CWE-284",
+          "owasp": "A05",
+          "detail": "aws_security_group.portal ports 22-22",
+          "remediation": "Restrict to a bastion/VPN CIDR or use SSM Session Manager.",
+          "waived": false
+        },
+        {
+          "id": "SAST-PATH-TRAVERSAL:app.py:34",
+          "rule": "SAST-PATH-TRAVERSAL",
+          "stage": "sast",
+          "severity": "high",
+          "title": "File opened from caller-supplied path without containment",
+          "file": "app.py",
+          "line": 34,
+          "cwe": "CWE-22",
+          "owasp": "A01",
+          "detail": "open() on a path derived from parameter(s) name",
+          "remediation": "Resolve the path and verify it stays inside the export directory, or map names through an allow-list.",
+          "waived": false
+        },
+        {
+          "id": "CVE-2018-18074:requirements.txt",
+          "rule": "SCA-VULNERABLE-DEPENDENCY",
+          "stage": "sca",
+          "severity": "high",
+          "title": "Dependency with a known vulnerability",
+          "file": "requirements.txt",
+          "line": 2,
+          "cwe": "CWE-522",
+          "owasp": "A06",
+          "detail": "requests 2.19.0: Authorization header sent to a different host after a redirect. (CVE-2018-18074). Fixed in 2.20.0.",
+          "remediation": "Upgrade to the fixed version.",
+          "waived": false,
+          "advisory": "CVE-2018-18074",
+          "package": "requests",
+          "version": "2.19.0",
+          "fixed": "2.20.0"
+        },
+        {
+          "id": "CVE-2019-10906:requirements.txt",
+          "rule": "SCA-VULNERABLE-DEPENDENCY",
+          "stage": "sca",
+          "severity": "high",
+          "title": "Dependency with a known vulnerability",
+          "file": "requirements.txt",
+          "line": 3,
+          "cwe": "CWE-265",
+          "owasp": "A06",
+          "detail": "jinja2 2.10: Sandbox escape through str.format_map. (CVE-2019-10906). Fixed in 2.10.1.",
+          "remediation": "Upgrade to the fixed version.",
+          "waived": false,
+          "advisory": "CVE-2019-10906",
+          "package": "jinja2",
+          "version": "2.10",
+          "fixed": "2.10.1"
+        },
+        {
+          "id": "SEC-HARDCODED-SECRET:app.py:13",
+          "rule": "SEC-HARDCODED-SECRET",
+          "stage": "secrets",
+          "severity": "high",
+          "title": "Hard-coded credential or signing secret",
+          "file": "app.py",
+          "line": 13,
+          "cwe": "CWE-798",
+          "owasp": "A07",
+          "detail": "value redacted",
+          "remediation": "Load the value from the environment or a secrets manager and rotate it.",
+          "waived": false
+        },
+        {
+          "id": "DOCKER-ROOT:Dockerfile:1",
+          "rule": "DOCKER-ROOT",
+          "stage": "container",
+          "severity": "medium",
+          "title": "Container runs as root",
+          "file": "Dockerfile",
+          "line": 1,
+          "cwe": "CWE-250",
+          "owasp": "A05",
+          "detail": "no non-root USER",
+          "remediation": "Add a non-root USER.",
+          "waived": false
+        },
+        {
+          "id": "IAC-RDS-UNENCRYPTED:infra/main.tf:24",
+          "rule": "IAC-RDS-UNENCRYPTED",
+          "stage": "iac",
+          "severity": "medium",
+          "title": "Database storage not encrypted",
+          "file": "infra/main.tf",
+          "line": 24,
+          "cwe": "CWE-311",
+          "owasp": "A02",
+          "detail": "aws_db_instance.ledger",
+          "remediation": "Set storage_encrypted = true with a customer-managed KMS key.",
+          "waived": false
+        },
+        {
+          "id": "SAST-WEAK-HASH:app.py:25",
+          "rule": "SAST-WEAK-HASH",
+          "stage": "sast",
+          "severity": "medium",
+          "title": "MD5/SHA-1 used (password hashing?)",
+          "file": "app.py",
+          "line": 25,
+          "cwe": "CWE-328",
+          "owasp": "A02",
+          "detail": "hashlib.md5",
+          "remediation": "Use a password KDF (argon2id, scrypt or PBKDF2-HMAC-SHA256 with a high work factor and per-user salt).",
+          "waived": false
+        },
+        {
+          "id": "SAST-VERBOSE-ERRORS:app.py:67",
+          "rule": "SAST-VERBOSE-ERRORS",
+          "stage": "sast",
+          "severity": "medium",
+          "title": "Exception detail returned to the client",
+          "file": "app.py",
+          "line": 67,
+          "cwe": "CWE-209",
+          "owasp": "A05",
+          "detail": "exception text returned in the response",
+          "remediation": "Log the detail server-side and return a generic error with a correlation id.",
+          "waived": false
+        },
+        {
+          "id": "SAST-WEAK-HASH:app.py:74",
+          "rule": "SAST-WEAK-HASH",
+          "stage": "sast",
+          "severity": "medium",
+          "title": "MD5/SHA-1 used (password hashing?)",
+          "file": "app.py",
+          "line": 74,
+          "cwe": "CWE-328",
+          "owasp": "A02",
+          "detail": "hashlib.md5",
+          "remediation": "Use a password KDF (argon2id, scrypt or PBKDF2-HMAC-SHA256 with a high work factor and per-user salt).",
+          "waived": false
+        },
+        {
+          "id": "SAST-COOKIE-FLAGS:app.py:78",
+          "rule": "SAST-COOKIE-FLAGS",
+          "stage": "sast",
+          "severity": "medium",
+          "title": "Session cookie missing Secure and/or HttpOnly",
+          "file": "app.py",
+          "line": 78,
+          "cwe": "CWE-614",
+          "owasp": "A05",
+          "detail": "missing Secure, HttpOnly",
+          "remediation": "Set Secure; HttpOnly; SameSite=Lax (or Strict) on session cookies.",
+          "waived": false
+        },
+        {
+          "id": "CVE-2023-32681:requirements.txt",
+          "rule": "SCA-VULNERABLE-DEPENDENCY",
+          "stage": "sca",
+          "severity": "medium",
+          "title": "Dependency with a known vulnerability",
+          "file": "requirements.txt",
+          "line": 2,
+          "cwe": "CWE-200",
+          "owasp": "A06",
+          "detail": "requests 2.19.0: Proxy-Authorization header leaked to the destination server on HTTPS redirects. (CVE-2023-32681). Fixed in 2.31.0.",
+          "remediation": "Upgrade to the fixed version.",
+          "waived": false,
+          "advisory": "CVE-2023-32681",
+          "package": "requests",
+          "version": "2.19.0",
+          "fixed": "2.31.0"
+        },
+        {
+          "id": "DOCKER-LATEST:Dockerfile:1",
+          "rule": "DOCKER-LATEST",
+          "stage": "container",
+          "severity": "low",
+          "title": "Base image not pinned (latest or untagged)",
+          "file": "Dockerfile",
+          "line": 1,
+          "cwe": "CWE-1104",
+          "owasp": "A06",
+          "detail": "python:latest",
+          "remediation": "Pin the base image to a version tag or digest.",
+          "waived": false
+        },
+        {
+          "id": "DOCKER-NO-HEALTHCHECK:Dockerfile:1",
+          "rule": "DOCKER-NO-HEALTHCHECK",
+          "stage": "container",
+          "severity": "low",
+          "title": "No HEALTHCHECK defined",
+          "file": "Dockerfile",
+          "line": 1,
+          "cwe": "CWE-693",
+          "owasp": "A05",
+          "detail": "",
+          "remediation": "Add a HEALTHCHECK so the orchestrator can restart unhealthy containers.",
+          "waived": false
+        },
+        {
+          "id": "DAST-MISSING-HEADERS:GET /health:0",
+          "rule": "DAST-MISSING-HEADERS",
+          "stage": "dast",
+          "severity": "low",
+          "title": "Security response headers missing",
+          "file": "GET /health",
+          "line": 0,
+          "cwe": "CWE-693",
+          "owasp": "A05",
+          "detail": "missing: X-Content-Type-Options, X-Frame-Options, Content-Security-Policy",
+          "remediation": "Send X-Content-Type-Options, X-Frame-Options and a Content-Security-Policy.",
+          "waived": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "appsec-demo-pipeline",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "DAST-MISSING-HEADERS",
+              "shortDescription": {
+                "text": "Security response headers missing"
+              },
+              "properties": {
+                "cwe": "CWE-693",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "DOCKER-NO-HEALTHCHECK",
+              "shortDescription": {
+                "text": "No HEALTHCHECK defined"
+              },
+              "properties": {
+                "cwe": "CWE-693",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "SAST-COOKIE-FLAGS",
+              "shortDescription": {
+                "text": "Session cookie missing Secure and/or HttpOnly"
+              },
+              "properties": {
+                "cwe": "CWE-614",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "SAST-INSECURE-RANDOM",
+              "shortDescription": {
+                "text": "Non-cryptographic RNG used for a token or secret"
+              },
+              "properties": {
+                "cwe": "CWE-338",
+                "owasp": "A02"
+              }
+            },
+            {
+              "id": "SAST-VERBOSE-ERRORS",
+              "shortDescription": {
+                "text": "Exception detail returned to the client"
+              },
+              "properties": {
+                "cwe": "CWE-209",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "SCA-VULNERABLE-DEPENDENCY",
+              "shortDescription": {
+                "text": "Dependency with a known vulnerability"
+              },
+              "properties": {
+                "cwe": "CWE-1104",
+                "owasp": "A06"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "SAST-INSECURE-RANDOM",
+          "level": "warning",
+          "message": {
+            "text": "Non-cryptographic RNG used for a token or secret: random.choice inside new_reset_token()"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 27
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-VERBOSE-ERRORS",
+          "level": "warning",
+          "message": {
+            "text": "Exception detail returned to the client: exception text returned in the response"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 67
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-COOKIE-FLAGS",
+          "level": "warning",
+          "message": {
+            "text": "Session cookie missing Secure and/or HttpOnly: missing Secure, HttpOnly"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 71
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SCA-VULNERABLE-DEPENDENCY",
+          "level": "warning",
+          "message": {
+            "text": "Dependency with a known vulnerability: requests 2.25.1: Proxy-Authorization header leaked to the destination server on HTTPS redirects. (CVE-2023-32681). Fixed in 2.31.0."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "requirements.txt"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DOCKER-NO-HEALTHCHECK",
+          "level": "note",
+          "message": {
+            "text": "No HEALTHCHECK defined"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DAST-MISSING-HEADERS",
+          "level": "note",
+          "message": {
+            "text": "Security response headers missing: missing: X-Frame-Options, Content-Security-Policy"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "GET /health"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

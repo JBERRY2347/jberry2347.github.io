@@ -1,0 +1,92 @@
+# Demo AppSec pipeline. Runs the stages in appsec-demo/pipeline against each demo app:
+# secrets, SAST, dependency, IaC, container, SBOM, DAST, then the release gate.
+#
+# The payments app is deliberately vulnerable, so its gate is EXPECTED to block. Each job checks
+# that the gate did what the demo expects (block / pass) and fails if it did not, which keeps the
+# run green when the pipeline is working and red if a rule regresses. See appsec-demo/README.md.
+
+name: AppSec demo pipeline
+
+on:
+  push:
+    paths:
+      - "appsec-demo/apps/**"
+      - "appsec-demo/pipeline/**"
+      - ".github/workflows/appsec-demo-pipeline.yml"
+  pull_request:
+    paths:
+      - "appsec-demo/apps/**"
+      - "appsec-demo/pipeline/**"
+      - ".github/workflows/appsec-demo-pipeline.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: appsec-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Pipeline self-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PDF dependency (lets the PDF consistency test run)
+        run: pip install reportlab
+      - name: Run tests
+        run: python3 -m unittest discover -s appsec-demo/tests -v
+
+  scan:
+    name: Scan ${{ matrix.app }}
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: payments-portal
+            expect: fail
+          - app: leave-tracker
+            expect: pass
+          - app: inventory-api
+            expect: pass
+    env:
+      APP: ${{ matrix.app }}
+      EXPECT: ${{ matrix.expect }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run AppSec pipeline and release gate
+        run: |
+          set +e
+          python3 appsec-demo/pipeline/run_pipeline.py --app "$APP" --out "$RUNNER_TEMP/appsec-out" --enforce
+          code=$?
+          case "$code" in
+            0) actual=pass ;;
+            3) actual=fail ;;
+            *) echo "::error::Pipeline itself failed (exit $code)"; exit "$code" ;;
+          esac
+          echo "Release gate: $actual (this demo expects: $EXPECT)"
+          if [ "$actual" != "$EXPECT" ]; then
+            echo "::error::Gate result '$actual' does not match the demo expectation '$EXPECT'"
+            exit 1
+          fi
+          if [ "$actual" = "fail" ]; then
+            echo "::notice title=Release blocked (expected)::$APP is deliberately vulnerable; the gate blocked it as designed."
+          fi
+      - name: Upload results (SARIF, SBOM, JSON)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appsec-${{ matrix.app }}
+          path: ${{ runner.temp }}/appsec-out
+          if-no-files-found: warn

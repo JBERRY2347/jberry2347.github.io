@@ -1,0 +1,11 @@
+{
+  "name": "Acme Inventory API",
+  "slug": "inventory-api",
+  "tier": "Tier 3 (standard)",
+  "data_classification": "Internal (stock levels, no personal data)",
+  "expected_gate": "pass",
+  "dast": {
+    "sqli": [{"path": "/search", "param": "q", "headers": {"X-Api-Key": "x"}}],
+    "unauthenticated": ["/search", "/export?name=stock"]
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "generated_from_run": "20261006-173842",
+  "documents": [
+    {
+      "slug": "portfolio",
+      "kind": "portfolio",
+      "title": "Portfolio summary",
+      "file": "pdf/00-portfolio-summary.pdf"
+    },
+    {
+      "slug": "pipeline-run",
+      "kind": "pipeline",
+      "title": "Pipeline run report",
+      "file": "pdf/00-pipeline-run-report.pdf"
+    },
+    {
+      "slug": "template",
+      "kind": "intake",
+      "title": "AppSec Intake Questionnaire (blank template)",
+      "file": "pdf/00-intake-questionnaire-blank.pdf"
+    },
+    {
+      "slug": "inventory-api",
+      "kind": "intake",
+      "title": "AppSec Intake Questionnaire: Acme Inventory API",
+      "file": "pdf/03-inventory-api-intake.pdf"
+    },
+    {
+      "slug": "inventory-api",
+      "kind": "review",
+      "title": "Acme Inventory API - security review",
+      "file": "pdf/03-inventory-api-security-review.pdf",
+      "decision": "Approved",
+      "counts": {
+        "Critical": 0,
+        "High": 0,
+        "Medium": 0,
+        "Low": 1,
+        "Info": 2
+      },
+      "total": 3,
+      "ticket": "ASR-2026-033"
+    },
+    {
+      "slug": "leave-tracker",
+      "kind": "intake",
+      "title": "AppSec Intake Questionnaire: Acme Leave Tracker",
+      "file": "pdf/02-leave-tracker-intake.pdf"
+    },
+    {
+      "slug": "leave-tracker",
+      "kind": "review",
+      "title": "Acme Leave Tracker - security review",
+      "file": "pdf/02-leave-tracker-security-review.pdf",
+      "decision": "Approved with conditions",
+      "counts": {
+        "Critical": 0,
+        "High": 0,
+        "Medium": 5,
+        "Low": 2,
+        "Info": 0
+      },
+      "total": 7,
+      "ticket": "ASR-2026-038"
+    },
+    {
+      "slug": "payments-portal",
+      "kind": "intake",
+      "title": "AppSec Intake Questionnaire: Acme Payments Portal",
+      "file": "pdf/01-payments-portal-intake.pdf"
+    },
+    {
+      "slug": "payments-portal",
+      "kind": "review",
+      "title": "Acme Payments Portal - security review",
+      "file": "pdf/01-payments-portal-security-review.pdf",
+      "decision": "Not approved",
+      "counts": {
+        "Critical": 3,
+        "High": 4,
+        "Medium": 5,
+        "Low": 1,
+        "Info": 0
+      },
+      "total": 13,
+      "ticket": "ASR-2026-041"
+    }
+  ],
+  "apps": [
+    {
+      "slug": "inventory-api",
+      "name": "Acme Inventory API",
+      "short": "Warehouse stock service",
+      "tier": "Tier 3 (standard)",
+      "decision": "Approved",
+      "gate": "pass",
+      "counts": {
+        "Critical": 0,
+        "High": 0,
+        "Medium": 0,
+        "Low": 1,
+        "Info": 2
+      },
+      "total": 3,
+      "ticket": "ASR-2026-033"
+    },
+    {
+      "slug": "leave-tracker",
+      "name": "Acme Leave Tracker",
+      "short": "Employee leave and absence tracker",
+      "tier": "Tier 2 (important)",
+      "decision": "Approved with conditions",
+      "gate": "pass",
+      "counts": {
+        "Critical": 0,
+        "High": 0,
+        "Medium": 5,
+        "Low": 2,
+        "Info": 0
+      },
+      "total": 7,
+      "ticket": "ASR-2026-038"
+    },
+    {
+      "slug": "payments-portal",
+      "name": "Acme Payments Portal",
+      "short": "Merchant payments back office",
+      "tier": "Tier 1 (critical)",
+      "decision": "Not approved",
+      "gate": "fail",
+      "counts": {
+        "Critical": 3,
+        "High": 4,
+        "Medium": 5,
+        "Low": 1,
+        "Info": 0
+      },
+      "total": 13,
+      "ticket": "ASR-2026-041"
+    }
+  ]
+}

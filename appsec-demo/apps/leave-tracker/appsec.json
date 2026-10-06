@@ -1,0 +1,11 @@
+{
+  "name": "Acme Leave Tracker",
+  "slug": "leave-tracker",
+  "tier": "Tier 2 (important)",
+  "data_classification": "Confidential (employee PII, health-related notes)",
+  "expected_gate": "pass",
+  "dast": {
+    "sqli": [{"path": "/search", "param": "name", "headers": {"Authorization": "Bearer tok-alice"}}],
+    "unauthenticated": ["/admin/export", "/leave/2"]
+  }
+}

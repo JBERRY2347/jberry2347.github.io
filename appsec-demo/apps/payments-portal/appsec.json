@@ -1,0 +1,12 @@
+{
+  "name": "Acme Payments Portal",
+  "slug": "payments-portal",
+  "tier": "Tier 1 (critical)",
+  "data_classification": "Restricted (cardholder data, PII)",
+  "expected_gate": "fail",
+  "dast": {
+    "sqli": [{"path": "/search", "param": "q"}],
+    "traversal": [{"path": "/download", "param": "file"}],
+    "unauthenticated": ["/admin"]
+  }
+}

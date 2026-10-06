@@ -16,8 +16,17 @@
       "repo": "https://github.com/JBERRY2347/cuesight",
       "icon": "./cuesight/icon-192.png",
       "category": "Utilities",
-      "tags": ["camera", "microphone", "on-device", "offline", "PWA"],
-      "platforms": ["web", "android"],
+      "tags": [
+        "camera",
+        "microphone",
+        "on-device",
+        "offline",
+        "PWA"
+      ],
+      "platforms": [
+        "web",
+        "android"
+      ],
       "android_package": "io.github.jberry2347.cuesight",
       "privacy": "./cuesight/privacy.html",
       "status": "live"
@@ -31,10 +40,37 @@
       "repo": "https://github.com/JBERRY2347/holdtheline",
       "icon": "./holdtheline/icon-192.png",
       "category": "Games",
-      "tags": ["camera", "multiplayer", "on-device", "offline", "PWA"],
-      "platforms": ["web"],
+      "tags": [
+        "camera",
+        "multiplayer",
+        "on-device",
+        "offline",
+        "PWA"
+      ],
+      "platforms": [
+        "web"
+      ],
       "privacy": "./holdtheline/privacy.html",
       "status": "live"
+    },
+    {
+      "id": "appsec-demo",
+      "name": "AppSec Review Demo",
+      "tagline": "Application security review proof of concept",
+      "description": "Three fictional apps taken through an application security review: filled-out intake forms and review PDFs, a working demo pipeline with a release gate, and a replayable pipeline viewer. The sample apps are deliberately vulnerable; everything about the company is invented.",
+      "url": "./appsec-demo/",
+      "repo": "https://github.com/JBERRY2347/jberry2347.github.io/tree/main/appsec-demo",
+      "category": "Security",
+      "tags": [
+        "AppSec",
+        "pipeline",
+        "PDF reports",
+        "demo"
+      ],
+      "platforms": [
+        "web"
+      ],
+      "status": "beta"
     }
   ]
 }

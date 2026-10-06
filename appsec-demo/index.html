@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1220">
+<meta name="description" content="Proof of concept for an application security review programme: filled-out review PDFs, demo applications and a working demo pipeline.">
+<title>AppSec Review Demo</title>
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./common.css">
+</head>
+<body>
+<main>
+  <div class="crumb"><a href="../">Apps</a> / AppSec review demo</div>
+  <h1>Application Security Review: proof of concept</h1>
+  <p class="lede">Three demo applications taken through an AppSec review: a filled-out intake form, an automated pipeline run, and a full review report with a decision. One is blocked, one is approved with a condition, one is clean.</p>
+  <div class="notice">Everything here is fictional. Acme Corp, the people, the tickets and the findings are invented. The code, the scanner output and the code excerpts in the PDFs are real and come from the demo apps in this repository. The payments and leave apps are <b>deliberately vulnerable</b>: run them on localhost only.</div>
+
+  <h2>The applications</h2>
+  <div class="grid" id="apps" aria-live="polite"><p class="lede">Loading...</p></div>
+
+  <h2>Programme documents</h2>
+  <div class="grid" id="docs"></div>
+
+  <h2>Pipeline</h2>
+  <div class="card">
+    <h3>Demo AppSec pipeline</h3>
+    <p>Nine stages (inventory, secret scan, SAST, dependency scan, IaC scan, container scan, SBOM, DAST, release gate) that really run against each app and enforce a policy. The viewer replays a recorded run; the GitHub Actions workflow runs it on every push.</p>
+    <div class="links">
+      <a class="btn primary" href="./pipeline/">Open the pipeline viewer</a>
+      <a class="btn" href="https://github.com/JBERRY2347/jberry2347.github.io/blob/main/.github/workflows/appsec-demo-pipeline.yml">Workflow YAML</a>
+      <a class="btn" href="https://github.com/JBERRY2347/jberry2347.github.io/tree/main/appsec-demo/pipeline">Pipeline source</a>
+    </div>
+  </div>
+
+  <h2>Suggested five-minute walkthrough</h2>
+  <ol class="steps">
+    <li><b>Start at the portfolio summary PDF.</b> Three apps, three outcomes, and the point that scanners miss access-control and design flaws.</li>
+    <li><b>Open the intake form for Payments Portal.</b> This is what a team submits; the AppSec tier decides review depth.</li>
+    <li><b>Open the pipeline viewer, pick Payments Portal and press Replay.</b> The gate blocks the release with the reasons shown.</li>
+    <li><b>Open the Payments review PDF.</b> Each finding has a CVSS score, CWE/OWASP mapping, a real code excerpt and a fix. Compare to the pipeline's output.</li>
+    <li><b>Switch to Leave Tracker.</b> The gate passes but the review finds an IDOR the tools cannot see (LV-01). That is the case for a manual review.</li>
+    <li><b>Finish on Inventory API.</b> A clean pass: the reference for what good looks like.</li>
+  </ol>
+</main>
+<script>
+(async function () {
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const decisionClass = d => d === 'Approved' ? 'b-ok' : d === 'Not approved' ? 'b-bad' : 'b-warn';
+  const SEV = [['Critical', 'critical'], ['High', 'high'], ['Medium', 'medium'], ['Low', 'low'], ['Info', 'info']];
+  let data;
+  try {
+    data = await (await fetch('./reviews/pdf/index.json', { cache: 'no-cache' })).json();
+  } catch (e) {
+    document.getElementById('apps').innerHTML = '<p class="lede">Could not load the document index. Run <code>python3 reviews/build_pdfs.py</code> to generate it.</p>';
+    return;
+  }
+  const byKey = (slug, kind) => data.documents.find(d => d.slug === slug && d.kind === kind);
+  document.getElementById('apps').innerHTML = data.apps.map(a => {
+    const sev = SEV.map(([label, key]) => '<span title="' + label + '"><i style="color:var(--' + key + ')">' + a.counts[label] + '</i> ' + label.toLowerCase() + '</span>').join('');
+    return '<article class="card">' +
+      '<div class="row"><span class="badge ' + decisionClass(a.decision) + '">' + esc(a.decision) + '</span>' +
+      '<span class="badge ' + (a.gate === 'pass' ? 'b-ok' : 'b-bad') + '">Pipeline gate: ' + (a.gate === 'pass' ? 'pass' : 'blocked') + '</span></div>' +
+      '<h3>' + esc(a.name) + '</h3><p>' + esc(a.short) + ' &middot; ' + esc(a.tier) + '</p>' +
+      '<div class="sev">' + sev + '</div>' +
+      '<div class="links"><a class="btn primary" href="./' + esc(byKey(a.slug, 'review').file) + '">Review PDF</a>' +
+      '<a class="btn" href="./' + esc(byKey(a.slug, 'intake').file) + '">Intake form</a>' +
+      '<a class="btn" href="./pipeline/#' + esc(a.slug) + '">Pipeline run</a>' +
+      '<a class="btn" href="https://github.com/JBERRY2347/jberry2347.github.io/tree/main/appsec-demo/apps/' + esc(a.slug) + '">Source</a></div></article>';
+  }).join('');
+  const extra = [['portfolio', 'portfolio', 'Portfolio summary', 'Roll-up across all three apps: outcomes, themes, what the pipeline missed, the review process.'],
+                 ['pipeline-run', 'pipeline', 'Pipeline run report', 'The pipeline run as a PDF: stage results per app and every finding.'],
+                 ['template', 'intake', 'Blank intake questionnaire', 'The form a team fills in to request a review.']];
+  document.getElementById('docs').innerHTML = extra.map(([slug, kind, title, text]) => {
+    const d = byKey(slug, kind);
+    return d ? '<article class="card"><h3>' + esc(title) + '</h3><p>' + esc(text) + '</p><div class="links"><a class="btn primary" href="./' + esc(d.file) + '">Open PDF</a></div></article>' : '';
+  }).join('');
+})();
+</script>
+</body>
+</html>

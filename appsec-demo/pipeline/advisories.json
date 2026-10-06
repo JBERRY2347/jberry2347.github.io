@@ -1,0 +1,9 @@
+{
+  "_note": "Curated subset used by the demo pipeline so it runs offline and deterministically. Severity labels follow the GitHub Advisory Database at the time of curation. Production pipelines should query a live feed (OSV, pip-audit, Dependabot) instead.",
+  "advisories": [
+    {"id": "CVE-2020-14343", "package": "pyyaml", "fixed": "5.4", "severity": "critical", "cwe": "CWE-20", "summary": "Arbitrary code execution via yaml.full_load / FullLoader on untrusted input."},
+    {"id": "CVE-2018-18074", "package": "requests", "fixed": "2.20.0", "severity": "high", "cwe": "CWE-522", "summary": "Authorization header sent to a different host after a redirect."},
+    {"id": "CVE-2019-10906", "package": "jinja2", "fixed": "2.10.1", "severity": "high", "cwe": "CWE-265", "summary": "Sandbox escape through str.format_map."},
+    {"id": "CVE-2023-32681", "package": "requests", "fixed": "2.31.0", "severity": "medium", "cwe": "CWE-200", "summary": "Proxy-Authorization header leaked to the destination server on HTTPS redirects."}
+  ]
+}

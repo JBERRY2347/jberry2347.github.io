@@ -1,0 +1,6 @@
+{
+  "name": "Acme AppSec release gate (demo)",
+  "fail_on": ["critical", "high"],
+  "max_medium": 5,
+  "notes": "Critical and high findings block the release unless a dated waiver exists in the app's appsec.json. More than max_medium medium findings also blocks. Manual-review findings are tracked in the review report, not by the pipeline."
+}

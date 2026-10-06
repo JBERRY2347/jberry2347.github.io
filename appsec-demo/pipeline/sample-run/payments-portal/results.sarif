@@ -1,0 +1,674 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "appsec-demo-pipeline",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "DAST-MISSING-HEADERS",
+              "shortDescription": {
+                "text": "Security response headers missing"
+              },
+              "properties": {
+                "cwe": "CWE-693",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "DAST-PATH-TRAVERSAL",
+              "shortDescription": {
+                "text": "Path traversal confirmed against the running app"
+              },
+              "properties": {
+                "cwe": "CWE-22",
+                "owasp": "A01"
+              }
+            },
+            {
+              "id": "DAST-SQLI",
+              "shortDescription": {
+                "text": "SQL injection confirmed against the running app"
+              },
+              "properties": {
+                "cwe": "CWE-89",
+                "owasp": "A03"
+              }
+            },
+            {
+              "id": "DAST-UNAUTH-ACCESS",
+              "shortDescription": {
+                "text": "Sensitive endpoint reachable without authentication"
+              },
+              "properties": {
+                "cwe": "CWE-306",
+                "owasp": "A01"
+              }
+            },
+            {
+              "id": "DOCKER-LATEST",
+              "shortDescription": {
+                "text": "Base image not pinned (latest or untagged)"
+              },
+              "properties": {
+                "cwe": "CWE-1104",
+                "owasp": "A06"
+              }
+            },
+            {
+              "id": "DOCKER-NO-HEALTHCHECK",
+              "shortDescription": {
+                "text": "No HEALTHCHECK defined"
+              },
+              "properties": {
+                "cwe": "CWE-693",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "DOCKER-ROOT",
+              "shortDescription": {
+                "text": "Container runs as root"
+              },
+              "properties": {
+                "cwe": "CWE-250",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "IAC-RDS-UNENCRYPTED",
+              "shortDescription": {
+                "text": "Database storage not encrypted"
+              },
+              "properties": {
+                "cwe": "CWE-311",
+                "owasp": "A02"
+              }
+            },
+            {
+              "id": "IAC-S3-PUBLIC-ACL",
+              "shortDescription": {
+                "text": "S3 bucket has a public ACL"
+              },
+              "properties": {
+                "cwe": "CWE-732",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "IAC-SG-OPEN-ADMIN-PORT",
+              "shortDescription": {
+                "text": "Admin port (SSH/RDP) open to 0.0.0.0/0"
+              },
+              "properties": {
+                "cwe": "CWE-284",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "SAST-CMDI",
+              "shortDescription": {
+                "text": "OS command built from input"
+              },
+              "properties": {
+                "cwe": "CWE-78",
+                "owasp": "A03"
+              }
+            },
+            {
+              "id": "SAST-COOKIE-FLAGS",
+              "shortDescription": {
+                "text": "Session cookie missing Secure and/or HttpOnly"
+              },
+              "properties": {
+                "cwe": "CWE-614",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "SAST-PATH-TRAVERSAL",
+              "shortDescription": {
+                "text": "File opened from caller-supplied path without containment"
+              },
+              "properties": {
+                "cwe": "CWE-22",
+                "owasp": "A01"
+              }
+            },
+            {
+              "id": "SAST-SQLI",
+              "shortDescription": {
+                "text": "SQL built by string formatting"
+              },
+              "properties": {
+                "cwe": "CWE-89",
+                "owasp": "A03"
+              }
+            },
+            {
+              "id": "SAST-VERBOSE-ERRORS",
+              "shortDescription": {
+                "text": "Exception detail returned to the client"
+              },
+              "properties": {
+                "cwe": "CWE-209",
+                "owasp": "A05"
+              }
+            },
+            {
+              "id": "SAST-WEAK-HASH",
+              "shortDescription": {
+                "text": "MD5/SHA-1 used (password hashing?)"
+              },
+              "properties": {
+                "cwe": "CWE-328",
+                "owasp": "A02"
+              }
+            },
+            {
+              "id": "SCA-VULNERABLE-DEPENDENCY",
+              "shortDescription": {
+                "text": "Dependency with a known vulnerability"
+              },
+              "properties": {
+                "cwe": "CWE-1104",
+                "owasp": "A06"
+              }
+            },
+            {
+              "id": "SEC-AWS-ACCESS-KEY",
+              "shortDescription": {
+                "text": "AWS access key id committed to source"
+              },
+              "properties": {
+                "cwe": "CWE-798",
+                "owasp": "A07"
+              }
+            },
+            {
+              "id": "SEC-AWS-SECRET",
+              "shortDescription": {
+                "text": "AWS secret access key committed to source"
+              },
+              "properties": {
+                "cwe": "CWE-798",
+                "owasp": "A07"
+              }
+            },
+            {
+              "id": "SEC-HARDCODED-SECRET",
+              "shortDescription": {
+                "text": "Hard-coded credential or signing secret"
+              },
+              "properties": {
+                "cwe": "CWE-798",
+                "owasp": "A07"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "DAST-SQLI",
+          "level": "error",
+          "message": {
+            "text": "SQL injection confirmed against the running app: parameter 'q': a lone quote produced a database error"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "GET /search"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-SQLI",
+          "level": "error",
+          "message": {
+            "text": "SQL built by string formatting: query assembled with string formatting"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-CMDI",
+          "level": "error",
+          "message": {
+            "text": "OS command built from input: os.system with a non-constant command"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 59
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SCA-VULNERABLE-DEPENDENCY",
+          "level": "error",
+          "message": {
+            "text": "Dependency with a known vulnerability: pyyaml 5.3: Arbitrary code execution via yaml.full_load / FullLoader on untrusted input. (CVE-2020-14343). Fixed in 5.4."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "requirements.txt"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC-AWS-ACCESS-KEY",
+          "level": "error",
+          "message": {
+            "text": "AWS access key id committed to source: value redacted"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 14
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC-AWS-SECRET",
+          "level": "error",
+          "message": {
+            "text": "AWS secret access key committed to source: value redacted"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 15
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DAST-UNAUTH-ACCESS",
+          "level": "error",
+          "message": {
+            "text": "Sensitive endpoint reachable without authentication: HTTP 200 with no credentials"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "GET /admin"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DAST-PATH-TRAVERSAL",
+          "level": "error",
+          "message": {
+            "text": "Path traversal confirmed against the running app: parameter 'file' returned file content for ../../../../../../../../../../etc/passwd"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "GET /download"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "IAC-S3-PUBLIC-ACL",
+          "level": "error",
+          "message": {
+            "text": "S3 bucket has a public ACL: aws_s3_bucket.exports"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/main.tf"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "IAC-SG-OPEN-ADMIN-PORT",
+          "level": "error",
+          "message": {
+            "text": "Admin port (SSH/RDP) open to 0.0.0.0/0: aws_security_group.portal ports 22-22"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/main.tf"
+                },
+                "region": {
+                  "startLine": 10
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-PATH-TRAVERSAL",
+          "level": "error",
+          "message": {
+            "text": "File opened from caller-supplied path without containment: open() on a path derived from parameter(s) name"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 34
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SCA-VULNERABLE-DEPENDENCY",
+          "level": "error",
+          "message": {
+            "text": "Dependency with a known vulnerability: requests 2.19.0: Authorization header sent to a different host after a redirect. (CVE-2018-18074). Fixed in 2.20.0."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "requirements.txt"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SCA-VULNERABLE-DEPENDENCY",
+          "level": "error",
+          "message": {
+            "text": "Dependency with a known vulnerability: jinja2 2.10: Sandbox escape through str.format_map. (CVE-2019-10906). Fixed in 2.10.1."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "requirements.txt"
+                },
+                "region": {
+                  "startLine": 3
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SEC-HARDCODED-SECRET",
+          "level": "error",
+          "message": {
+            "text": "Hard-coded credential or signing secret: value redacted"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 13
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DOCKER-ROOT",
+          "level": "warning",
+          "message": {
+            "text": "Container runs as root: no non-root USER"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "IAC-RDS-UNENCRYPTED",
+          "level": "warning",
+          "message": {
+            "text": "Database storage not encrypted: aws_db_instance.ledger"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "infra/main.tf"
+                },
+                "region": {
+                  "startLine": 24
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-WEAK-HASH",
+          "level": "warning",
+          "message": {
+            "text": "MD5/SHA-1 used (password hashing?): hashlib.md5"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 25
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-VERBOSE-ERRORS",
+          "level": "warning",
+          "message": {
+            "text": "Exception detail returned to the client: exception text returned in the response"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 67
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-WEAK-HASH",
+          "level": "warning",
+          "message": {
+            "text": "MD5/SHA-1 used (password hashing?): hashlib.md5"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 74
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SAST-COOKIE-FLAGS",
+          "level": "warning",
+          "message": {
+            "text": "Session cookie missing Secure and/or HttpOnly: missing Secure, HttpOnly"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "app.py"
+                },
+                "region": {
+                  "startLine": 78
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SCA-VULNERABLE-DEPENDENCY",
+          "level": "warning",
+          "message": {
+            "text": "Dependency with a known vulnerability: requests 2.19.0: Proxy-Authorization header leaked to the destination server on HTTPS redirects. (CVE-2023-32681). Fixed in 2.31.0."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "requirements.txt"
+                },
+                "region": {
+                  "startLine": 2
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DOCKER-LATEST",
+          "level": "note",
+          "message": {
+            "text": "Base image not pinned (latest or untagged): python:latest"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DOCKER-NO-HEALTHCHECK",
+          "level": "note",
+          "message": {
+            "text": "No HEALTHCHECK defined"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DAST-MISSING-HEADERS",
+          "level": "note",
+          "message": {
+            "text": "Security response headers missing: missing: X-Content-Type-Options, X-Frame-Options, Content-Security-Policy"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "GET /health"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

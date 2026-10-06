@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1220">
+<meta name="description" content="Replay of the demo AppSec pipeline: scan stages, findings and the release gate for three demo applications.">
+<title>AppSec Pipeline Demo</title>
+<link rel="icon" href="../../icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../common.css">
+<style>
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 14px; }
+  .tab { background: var(--panel); border: 1px solid var(--line); color: var(--muted); padding: 8px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: .9rem; }
+  .tab[aria-selected="true"] { background: var(--grad); color: #fff; border-color: transparent; }
+  .rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(98px, 1fr)); gap: 8px; margin: 14px 0; }
+  .stage { background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--line); border-radius: 10px; padding: 10px; min-height: 86px; transition: border-color .25s, background .25s; }
+  .stage b { display: block; font-size: .85rem; }
+  .stage small { color: var(--muted); display: block; margin-top: 2px; font-size: .75rem; }
+  .stage .st { margin-top: 6px; font-size: .75rem; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
+  .stage.pass { border-top-color: var(--ok); } .stage.pass .st { color: var(--ok); }
+  .stage.warn { border-top-color: var(--warn); } .stage.warn .st { color: var(--warn); }
+  .stage.fail { border-top-color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, var(--panel)); } .stage.fail .st { color: var(--bad); }
+  .stage.running { border-top-color: var(--accent); } .stage.running .st { color: var(--accent); }
+  .gate { border-radius: var(--radius); padding: 16px 18px; border: 1px solid var(--line); background: var(--panel); margin: 14px 0; }
+  .gate.pass { border-color: var(--ok); } .gate.fail { border-color: var(--bad); }
+  .gate h3 { margin: 0 0 4px; }
+  .gate p { margin: 0; color: var(--muted); font-size: .9rem; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .filters button { background: var(--panel); border: 1px solid var(--line); color: var(--muted); padding: 5px 11px; border-radius: 999px; cursor: pointer; font: inherit; font-size: .82rem; }
+  .filters button[aria-pressed="true"] { border-color: var(--accent); color: var(--text); }
+  .pill { display: inline-block; min-width: 62px; text-align: center; padding: 1px 8px; border-radius: 6px; font-size: .72rem; font-weight: 700; color: #111; }
+  .pill.critical { background: var(--critical); color: #fff; } .pill.high { background: var(--high); } .pill.medium { background: var(--medium); }
+  .pill.low { background: var(--low); } .pill.info { background: var(--info); }
+  .meta { color: var(--muted); font-size: .85rem; margin: 8px 0; }
+  td.loc { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .78rem; word-break: break-word; }
+</style>
+</head>
+<body>
+<main>
+  <div class="crumb"><a href="../../">Apps</a> / <a href="../">AppSec review demo</a> / Pipeline</div>
+  <h1>Demo AppSec pipeline</h1>
+  <p class="lede">A recorded run of the real pipeline (<code>run_pipeline.py</code>) against the three demo apps. Pick an app and press Replay to watch the stages run and the release gate decide.</p>
+  <div class="meta" id="runmeta"></div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Application"></div>
+  <div class="row"><button class="btn primary" id="replay">Replay run</button><span class="meta" id="app-meta"></span></div>
+  <div class="rail" id="rail" aria-label="Pipeline stages"></div>
+  <div class="gate" id="gate" hidden></div>
+  <h2>Findings</h2>
+  <div class="filters" id="filters" role="group" aria-label="Filter by severity"></div>
+  <div class="tablewrap"><table><thead><tr><th>Severity</th><th>Stage</th><th>Rule</th><th>Location</th><th>Detail / fix</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <h2>Artifacts</h2>
+  <p class="meta" id="artifacts"></p>
+  <h2>Release policy</h2>
+  <p class="meta" id="policy"></p>
+</main>
+<script>
+(async function () {
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const $ = id => document.getElementById(id);
+  const SEVS = ['critical', 'high', 'medium', 'low', 'info'];
+  let report;
+  try { report = await (await fetch('./sample-run/pipeline-run.json', { cache: 'no-cache' })).json(); }
+  catch (e) { $('runmeta').textContent = 'Could not load sample-run/pipeline-run.json. Run python3 pipeline/run_pipeline.py first.'; return; }
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let current = report.apps.find(a => a.slug === location.hash.slice(1)) || report.apps[report.apps.length - 1];
+  let filter = 'all', timer = null;
+  $('runmeta').textContent = 'Run ' + report.run.id + ' · commit ' + report.run.commit + ' · ' + report.run.finished + ' · pipeline v' + report.pipeline.version;
+  $('policy').textContent = report.pipeline.policy.name + ': ' + report.pipeline.policy.notes;
+
+  function renderTabs() {
+    $('tabs').innerHTML = report.apps.map(a => '<button class="tab" role="tab" data-slug="' + esc(a.slug) + '" aria-selected="' + (a === current) + '">' + esc(a.name) + '</button>').join('');
+    $('tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => { current = report.apps.find(a => a.slug === b.dataset.slug); history.replaceState(null, '', '#' + current.slug); select(); });
+  }
+  function stageHtml(s, state) {
+    const label = { pass: 'PASS', warn: 'FINDINGS', fail: 'BLOCKED', skipped: 'SKIPPED', running: 'RUNNING', waiting: 'WAITING' }[state];
+    const extra = state === 'waiting' || state === 'running' ? '' : '<small>' + (s.findings ? s.findings + ' finding' + (s.findings === 1 ? '' : 's') : 'clean') + ' · ' + s.duration_ms + ' ms</small>';
+    return '<div class="stage ' + (state === 'waiting' ? '' : state) + '" title="' + esc(s.description) + '"><b>' + esc(s.label) + '</b>' + extra + '<div class="st">' + label + '</div></div>';
+  }
+  function renderRail(upTo) {
+    $('rail').innerHTML = current.stages.map((s, i) => stageHtml(s, i < upTo ? s.status : i === upTo ? 'running' : 'waiting')).join('');
+  }
+  function renderGate(show) {
+    const g = $('gate');
+    g.hidden = !show;
+    if (!show) return;
+    const pass = current.gate === 'pass', c = current.counts;
+    g.className = 'gate ' + (pass ? 'pass' : 'fail');
+    g.innerHTML = '<h3>' + (pass ? 'Release gate passed' : 'Release gate blocked') + '</h3><p>' +
+      (current.gate_reasons.length ? esc(current.gate_reasons.join('; ')) + '. ' : 'No critical or high findings. ') +
+      c.critical + ' critical, ' + c.high + ' high, ' + c.medium + ' medium, ' + c.low + ' low.' +
+      (pass && c.medium ? ' Medium findings are tracked in the review.' : '') + '</p>';
+  }
+  function renderFilters() {
+    $('filters').innerHTML = ['all'].concat(SEVS).map(s => {
+      const n = s === 'all' ? current.findings.length : current.findings.filter(f => f.severity === s).length;
+      return '<button data-s="' + s + '" aria-pressed="' + (filter === s) + '">' + s + ' (' + n + ')</button>';
+    }).join('');
+    $('filters').querySelectorAll('button').forEach(b => b.onclick = () => { filter = b.dataset.s; renderFilters(); renderRows(); });
+  }
+  function renderRows() {
+    const list = current.findings.filter(f => filter === 'all' || f.severity === filter);
+    $('rows').innerHTML = list.length ? list.map(f =>
+      '<tr><td><span class="pill ' + f.severity + '">' + f.severity.toUpperCase() + '</span></td><td>' + esc(f.stage) + '</td><td><code>' + esc(f.rule) + '</code><br><small class="meta">' + esc(f.cwe) + ' · OWASP ' + esc(f.owasp) + '</small></td>' +
+      '<td class="loc">' + esc(f.file) + (f.line ? ':' + f.line : '') + '</td><td>' + esc(f.title) + (f.detail ? '<br><small class="meta">' + esc(f.detail) + '</small>' : '') + '<br><small class="meta">Fix: ' + esc(f.remediation) + '</small></td></tr>').join('')
+      : '<tr><td colspan="5" class="meta">No findings' + (filter === 'all' ? ' in any stage. This is what a clean pass looks like.' : ' at this severity.') + '</td></tr>';
+  }
+  function select() {
+    clearTimeout(timer);
+    renderTabs(); filter = 'all';
+    $('app-meta').textContent = current.tier + ' · ' + current.data_classification;
+    renderRail(current.stages.length); renderGate(true); renderFilters(); renderRows();
+    const base = './sample-run/' + current.slug + '/';
+    $('artifacts').innerHTML = '<a href="' + base + 'sbom.cdx.json">SBOM (CycloneDX)</a> · <a href="' + base + 'results.sarif">SARIF results</a> · <a href="./sample-run/pipeline-run.json">Full run JSON</a> · <a href="./sample-run/summary.md">Markdown summary</a>';
+  }
+  function replay() {
+    clearTimeout(timer);
+    if (reduce) { select(); return; }
+    renderGate(false); $('rows').innerHTML = ''; $('filters').innerHTML = '';
+    let i = 0;
+    (function step() {
+      renderRail(i);
+      if (i >= current.stages.length) { renderGate(true); renderFilters(); renderRows(); return; }
+      i += 1;
+      timer = setTimeout(step, 520);
+    })();
+  }
+  $('replay').onclick = replay;
+  select();
+})();
+</script>
+</body>
+</html>

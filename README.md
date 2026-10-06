@@ -25,6 +25,8 @@ installable as a PWA and works offline once visited.
 | `404.html` | Fallback for bad URLs under the root. |
 | `.well-known/assetlinks.json` | Digital Asset Links for the CueSight Android app (TWA). Keep this. |
 | `.nojekyll` | Tells Pages to serve files as-is (no Jekyll). |
+| `appsec-demo/` | Part of the site, served at `/appsec-demo/`: a proof of concept for an application security review programme (demo apps, review PDFs, working demo pipeline). See [`appsec-demo/README.md`](appsec-demo/README.md). |
+| `.github/workflows/appsec-demo-pipeline.yml` | Runs the AppSec demo's self-tests and pipeline per demo app on every relevant push. |
 | `kalshi/` | Not part of the site. A Python command line tool for trading on Kalshi; see [`kalshi/README.md`](kalshi/README.md). |
 | `.github/workflows/kalshi-autopilot.yml` | Scheduled run of the Kalshi autopilot. Off until the `KALSHI_AUTOPILOT_ENABLED` variable is set. |
 
