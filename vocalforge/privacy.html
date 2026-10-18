@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1220">
+<title>VocalForge · Privacy</title>
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+body{background:#0d1220;color:#e8edf8;font-family:'Segoe UI',system-ui,sans-serif;line-height:1.6;margin:0;padding:24px 16px}
+main{max-width:720px;margin:0 auto}
+h1{color:#ec4899;font-size:1.5rem}
+h2{font-size:1.05rem;color:#9aa7c2;margin-top:28px}
+a{color:#4da3ff}
+p,li{color:#c9d3ea}
+</style>
+</head>
+<body>
+<main>
+<h1>VocalForge privacy</h1>
+<p>VocalForge is a static page. There is no VocalForge server, no account, no analytics and no tracking.</p>
+
+<h2>What stays on your device</h2>
+<ul>
+  <li><strong>Your API key</strong> is kept in this browser's local storage and never leaves it except as the authentication header on calls to the API host you configured.</li>
+  <li><strong>Your lyrics and settings</strong> are saved in local storage so a refresh does not lose them.</li>
+  <li><strong>Generated audio</strong> is saved in this browser's IndexedDB. Delete a take in the app, or clear the site's data in your browser, to remove it.</li>
+</ul>
+
+<h2>What leaves your device</h2>
+<p>When you press Generate, Draft lyrics or Check key, the page sends your lyrics, style settings and API key to the API host shown in Settings. By default that is ElevenLabs (<code>api.elevenlabs.io</code>), whose handling of that data is covered by the <a href="https://elevenlabs.io/privacy-policy" rel="noopener">ElevenLabs privacy policy</a>. If you point the host at your own relay, the same data goes through that relay instead.</p>
+<p>Nothing else is sent anywhere.</p>
+
+<p><a href="./">Back to VocalForge</a> · <a href="../">All apps</a></p>
+</main>
+</body>
+</html>

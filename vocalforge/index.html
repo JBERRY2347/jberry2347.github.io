@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1220">
+<meta name="description" content="Type lyrics, pick a voice and a style, and get them sung. Runs in your browser with your own ElevenLabs key; nothing is stored anywhere but your device.">
+<title>VocalForge · AI vocals for your lyrics</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<header class="top">
+  <a class="back" href="../" title="All apps" aria-label="Back to all apps">‹</a>
+  <img class="logo" src="./icon.svg" alt="" width="40" height="40">
+  <div class="title">
+    <h1>VocalForge</h1>
+    <p>Type lyrics. Get them sung.</p>
+  </div>
+  <button id="settings-btn" class="iconbtn" type="button" aria-label="Settings" title="Settings">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 .1-1 7.6 7.6 0 0 0-.1-1l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.3 7.3 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7.3 7.3 0 0 0-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.5 11a7.6 7.6 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.2.4.5.4h4c.2 0 .4-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+  </button>
+</header>
+
+<div id="setup-banner" class="banner" hidden>
+  <span>Add your ElevenLabs API key to start generating. It stays on this device.</span>
+  <button type="button" class="btn small" id="setup-open">Add key</button>
+</div>
+
+<main class="layout">
+  <section class="panel" aria-labelledby="h-lyrics">
+    <h2 id="h-lyrics">Lyrics</h2>
+    <div class="chips" id="tag-chips" aria-label="Insert a section tag">
+      <button type="button" class="chip" data-tag="[Intro]">+ Intro</button>
+      <button type="button" class="chip" data-tag="[Verse]">+ Verse</button>
+      <button type="button" class="chip" data-tag="[Pre-Chorus]">+ Pre-Chorus</button>
+      <button type="button" class="chip" data-tag="[Chorus]">+ Chorus</button>
+      <button type="button" class="chip" data-tag="[Bridge]">+ Bridge</button>
+      <button type="button" class="chip" data-tag="[Outro]">+ Outro</button>
+    </div>
+    <textarea id="lyrics" rows="14" spellcheck="true" aria-label="Lyrics" placeholder="[Verse]
+Streetlights hum on an empty road
+Every mile a story told
+
+[Chorus 18s]
+Hold on, hold on, the night is ours
+We're chasing down the falling stars"></textarea>
+    <p class="hint">Start a section with a tag on its own line: <code>[Verse]</code>, <code>[Chorus]</code>, <code>[Bridge]</code>… Pin a section's length with <code>[Chorus 18s]</code> or <code>[Bridge 0:12]</code>. A tag with no lines under it becomes an instrumental or hummed passage.</p>
+    <div id="structure" class="structure" aria-live="polite"></div>
+
+    <details class="sub">
+      <summary>No lyrics yet? Let the model draft some</summary>
+      <div class="field">
+        <label for="topic">What's the song about?</label>
+        <input id="topic" type="text" placeholder="a late-night drive after a breakup" autocomplete="off">
+      </div>
+      <div class="row">
+        <button type="button" class="btn ghost" id="draft-btn">Draft lyrics</button>
+        <span class="hint">Uses the style settings below. Drafting is free on ElevenLabs; only generating audio uses credits.</span>
+      </div>
+    </details>
+
+    <h2>Voice &amp; style</h2>
+    <div class="field">
+      <label for="genre">Genre / vibe</label>
+      <input id="genre" type="text" placeholder="indie pop ballad · trap · country · gospel · lo-fi R&amp;B" autocomplete="off">
+    </div>
+    <div class="row two">
+      <div class="field">
+        <label for="voice">Voice</label>
+        <select id="voice">
+          <option value="female">Female lead</option>
+          <option value="male">Male lead</option>
+          <option value="androgynous">Androgynous lead</option>
+          <option value="duet">Duet (male + female)</option>
+          <option value="choir">Choir / group</option>
+          <option value="child">Young / child-like</option>
+          <option value="rap-male">Male rapper</option>
+          <option value="rap-female">Female rapper</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="tempo">Tempo</label>
+        <select id="tempo">
+          <option value="">Let the model pick</option>
+          <option value="slow">Slow (~70 BPM)</option>
+          <option value="mid">Mid (~95 BPM)</option>
+          <option value="upbeat">Upbeat (~120 BPM)</option>
+          <option value="fast">Fast (~140 BPM)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <span class="label">Mood</span>
+      <div class="chips" id="moods" role="group" aria-label="Mood">
+        <button type="button" class="chip toggle" data-mood="emotional" aria-pressed="false">emotional</button>
+        <button type="button" class="chip toggle" data-mood="upbeat" aria-pressed="false">upbeat</button>
+        <button type="button" class="chip toggle" data-mood="dreamy" aria-pressed="false">dreamy</button>
+        <button type="button" class="chip toggle" data-mood="dark" aria-pressed="false">dark</button>
+        <button type="button" class="chip toggle" data-mood="intimate" aria-pressed="false">intimate</button>
+        <button type="button" class="chip toggle" data-mood="powerful" aria-pressed="false">powerful</button>
+        <button type="button" class="chip toggle" data-mood="playful" aria-pressed="false">playful</button>
+        <button type="button" class="chip toggle" data-mood="melancholic" aria-pressed="false">melancholic</button>
+        <button type="button" class="chip toggle" data-mood="anthemic" aria-pressed="false">anthemic</button>
+      </div>
+    </div>
+    <div class="row two">
+      <div class="field">
+        <label for="extra">Extra direction <span class="opt">optional</span></label>
+        <input id="extra" type="text" placeholder="breathy, stacked harmonies on the chorus" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="avoid">Avoid <span class="opt">optional</span></label>
+        <input id="avoid" type="text" placeholder="autotune, screaming" autocomplete="off">
+      </div>
+    </div>
+
+    <h2>Output</h2>
+    <div class="seg" role="radiogroup" aria-label="Output type">
+      <label><input type="radio" name="output" value="song" checked><span>Full song</span><small>sung vocals with backing music</small></label>
+      <label><input type="radio" name="output" value="acappella"><span>Vocals only</span><small>a cappella, to drop on your own beat</small></label>
+      <label><input type="radio" name="output" value="instrumental"><span>Instrumental</span><small>backing music only, no vocals</small></label>
+    </div>
+    <div class="field">
+      <label for="length">Length <span id="length-label" class="val"></span></label>
+      <input type="range" id="length" min="10" max="300" step="5" value="60">
+      <p class="hint" id="length-hint"></p>
+    </div>
+    <div class="row two">
+      <div class="field">
+        <label for="model">Model</label>
+        <select id="model">
+          <option value="music_v2_5">Music v2.5 (recommended)</option>
+          <option value="music_v2">Music v2</option>
+          <option value="music_v1">Music v1 (legacy)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="mode">How lyrics are sent</label>
+        <select id="mode">
+          <option value="structured">Structured: one chunk per section</option>
+          <option value="freeform">Freeform: lyrics inside a prompt</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn primary big" id="generate">Generate vocals</button>
+      <button type="button" class="btn ghost big" id="cancel" hidden>Cancel</button>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <p id="error" class="error" role="alert" hidden></p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-takes">
+    <h2 id="h-takes">Takes <span id="takes-count" class="count"></span></h2>
+    <p class="hint">Every generation lands here and is kept on this device until you delete it.</p>
+    <div id="takes"></div>
+    <p id="takes-empty" class="empty">Nothing yet. Your takes will show up here.</p>
+  </section>
+</main>
+
+<dialog id="settings" aria-labelledby="h-settings">
+  <form method="dialog" class="dialog-body">
+    <h2 id="h-settings">Settings</h2>
+    <div class="field">
+      <label for="api-key">ElevenLabs API key</label>
+      <div class="keyrow">
+        <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk_…">
+        <button type="button" class="btn ghost small" id="key-toggle" aria-label="Show key">Show</button>
+      </div>
+      <p class="hint">Create one at elevenlabs.io → Profile → API keys. Music generation needs a paid plan. The key is saved in this browser only and sent only to the API host below.</p>
+    </div>
+    <div class="field">
+      <label for="api-base">API host</label>
+      <input id="api-base" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.elevenlabs.io">
+      <p class="hint">Leave as is to call ElevenLabs directly. If your browser blocks the call, point this at your own relay; see <a href="./README.md#if-the-browser-blocks-the-call">the README</a>.</p>
+    </div>
+    <p id="key-check" class="status"></p>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="key-check-btn">Check key</button>
+      <button type="button" class="btn ghost" id="key-forget">Forget key</button>
+      <button type="submit" class="btn primary" id="settings-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<footer>
+  Generated with the <a href="https://elevenlabs.io/music" rel="noopener">ElevenLabs Music</a> API using your own key
+  · <a href="./privacy.html">Privacy</a>
+  · <a href="https://github.com/JBERRY2347/jberry2347.github.io/tree/main/vocalforge" rel="noopener">Source</a>
+  · <a href="../">All apps</a>
+</footer>
+
+<script src="./app.js"></script>
+</body>
+</html>

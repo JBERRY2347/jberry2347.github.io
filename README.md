@@ -25,12 +25,15 @@ installable as a PWA and works offline once visited.
 | `404.html` | Fallback for bad URLs under the root. |
 | `.well-known/assetlinks.json` | Digital Asset Links for the CueSight Android app (TWA). Keep this. |
 | `.nojekyll` | Tells Pages to serve files as-is (no Jekyll). |
+| `vocalforge/` | An app that lives in this repo rather than its own: AI vocals for your lyrics, served at `/vocalforge/`. See [`vocalforge/README.md`](vocalforge/README.md). |
 | `kalshi/` | Not part of the site. A Python command line tool for trading on Kalshi; see [`kalshi/README.md`](kalshi/README.md). |
 | `.github/workflows/kalshi-autopilot.yml` | Scheduled run of the Kalshi autopilot. Off until the `KALSHI_AUTOPILOT_ENABLED` variable is set. |
 
 ## Adding an app
 
 1. Push the app to its own public repo under `JBERRY2347/<name>`. A single `index.html` is enough.
+   (A small app can also live in a folder of this repo, like `vocalforge/`; then skip step 2 and use
+   `"repo": "https://github.com/JBERRY2347/jberry2347.github.io/tree/main/<name>"`.)
 2. In that repo: **Settings → Pages → Source: Deploy from a branch → `main` / `(root)`**.
    It will be live at `https://jberry2347.github.io/<name>/` in a minute or two.
 3. Add an entry to `apps.json`:
