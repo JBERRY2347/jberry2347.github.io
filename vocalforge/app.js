@@ -230,7 +230,12 @@ function buildRequest(o) {
   }
   const body = { model_id: o.model, composition_plan: plan, force_instrumental: false };
   if (o.model === 'music_v1') body.respect_sections_durations = true;
-  return { problems, totalMs, body, sections };
+  const summary = sections.map((s, i) => ({
+    name: s.name, lines: s.lines, ms: s.ms,
+    pos: plan.chunks ? plan.chunks[i].positive_styles : uniq([...plan.sections[i].positive_local_styles, ...g.pos]),
+    neg: plan.chunks ? plan.chunks[i].negative_styles : g.neg,
+  }));
+  return { problems, totalMs, body, sections: summary };
 }
 
 // ---------- API ----------
@@ -276,7 +281,7 @@ async function callApi(path, init) {
   try {
     res = await fetch(apiBase() + path, {
       ...init,
-      headers: { 'xi-api-key': key, 'Content-Type': 'application/json', ...(init.headers || {}) },
+      headers: { 'xi-api-key': key, ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(init.headers || {}) },
     });
   } catch (err) {
     throw networkError(err);
@@ -285,13 +290,109 @@ async function callApi(path, init) {
   return res;
 }
 
-async function compose(body, signal) {
+/** Generate audio. Returns { blob, songId, storeNote }.
+    With `store`, the detailed endpoint is asked to keep the song on ElevenLabs (store_for_inpainting) so
+    single sections can be rewritten later; that gives back a song_id. If ElevenLabs refuses that request
+    with a 4xx that is not about the key or credits, we fall back to the plain endpoint and say so. */
+async function compose(body, signal, store) {
+  let storeNote = null;
+  if (store) {
+    try {
+      const res = await callApi(`/v1/music/detailed?output_format=${OUTPUT_FORMAT}`, {
+        method: 'POST', body: JSON.stringify({ ...body, store_for_inpainting: true }),
+        headers: { Accept: 'multipart/mixed, application/json' }, signal,
+      });
+      const { json, blob } = await parseDetailed(res);
+      if (!blob || !blob.size) throw new Error('The API returned no audio in its detailed response.');
+      const songId = findKey(json, 'song_id');
+      return { blob, songId: typeof songId === 'string' ? songId : null, detail: json, storeNote: songId ? null : 'ElevenLabs did not return a song id, so this take cannot be rewritten by section.' };
+    } catch (err) {
+      const code = (err.message || '').match(/^(\d{3}) /);
+      if (!code || ['401', '402', '429'].includes(code[1])) throw err;
+      storeNote = `Not stored for rewrites: ElevenLabs refused the stored generation (${err.message.split('\n')[0]}). Generated without storing instead.`;
+    }
+  }
   const res = await callApi(`/v1/music?output_format=${OUTPUT_FORMAT}`, {
     method: 'POST', body: JSON.stringify(body), headers: { Accept: 'audio/mpeg' }, signal,
   });
   const blob = await res.blob();
   if (!blob.size) throw new Error('The API returned an empty audio file.');
-  return blob;
+  return { blob, songId: null, detail: null, storeNote };
+}
+
+/** Upload an existing take so ElevenLabs can use it as inpainting source. Returns its song_id. */
+async function uploadForInpainting(blob) {
+  const fd = new FormData();
+  fd.append('file', blob, 'take.mp3');
+  const res = await callApi('/v1/music/upload', { method: 'POST', body: fd });
+  const json = await res.json();
+  const songId = findKey(json, 'song_id');
+  if (typeof songId !== 'string') throw new Error('The upload succeeded but no song id came back: ' + JSON.stringify(json).slice(0, 200));
+  return songId;
+}
+
+/** Depth-first search for a key in nested JSON. */
+function findKey(obj, key) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  if (Object.prototype.hasOwnProperty.call(obj, key)) return obj[key];
+  for (const v of Object.values(obj)) {
+    const hit = findKey(v, key);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+const TEXT = new TextDecoder();
+function indexOfBytes(hay, needle, from) {
+  outer: for (let i = from; i <= hay.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+/** Split the detailed endpoint's multipart/mixed (or JSON) response into { json, blob }. */
+async function parseDetailed(res) {
+  const ct = res.headers.get('content-type') || '';
+  const buf = new Uint8Array(await res.arrayBuffer());
+  const bm = ct.match(/boundary="?([^";]+)"?/i);
+  if (!bm) {
+    if (/json/i.test(ct)) {
+      const json = JSON.parse(TEXT.decode(buf));
+      const b64 = findKey(json, 'audio_base64') ?? findKey(json, 'audio_base_64') ?? findKey(json, 'audio');
+      if (typeof b64 === 'string') {
+        const bin = atob(b64.replace(/^data:[^,]*,/, ''));
+        const bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
+        return { json, blob: new Blob([bytes], { type: 'audio/mpeg' }) };
+      }
+      throw new Error('The detailed response had no audio in it.');
+    }
+    throw new Error('Unexpected response type from the detailed endpoint: ' + ct);
+  }
+  const delim = new TextEncoder().encode('--' + bm[1]);
+  let json = null, blob = null;
+  let at = indexOfBytes(buf, delim, 0);
+  while (at !== -1) {
+    const start = at + delim.length;
+    if (buf[start] === 0x2d && buf[start + 1] === 0x2d) break; // closing delimiter
+    const next = indexOfBytes(buf, delim, start);
+    let part = buf.subarray(start, next === -1 ? buf.length : next);
+    let s = 0; if (part[0] === 13 && part[1] === 10) s = 2; else if (part[0] === 10) s = 1;
+    let e = part.length; if (part[e - 2] === 13 && part[e - 1] === 10) e -= 2; else if (part[e - 1] === 10) e -= 1;
+    part = part.subarray(s, e);
+    let hdrEnd = indexOfBytes(part, [13, 10, 13, 10], 0), skip = 4;
+    if (hdrEnd === -1) { hdrEnd = indexOfBytes(part, [10, 10], 0); skip = 2; }
+    const headers = hdrEnd === -1 ? '' : TEXT.decode(part.subarray(0, hdrEnd)).toLowerCase();
+    const body = hdrEnd === -1 ? part : part.subarray(hdrEnd + skip);
+    const type = (headers.match(/content-type:\s*([^;\r\n]+)/) || [])[1] || '';
+    if (/json/.test(type) || (!type && body[0] === 0x7b)) {
+      try { json = JSON.parse(TEXT.decode(body)); } catch { /* not JSON after all */ }
+    } else if (/audio|octet/.test(type) || (!type && body.length > 64)) {
+      blob = new Blob([body], { type: type.startsWith('audio') ? type : 'audio/mpeg' });
+    }
+    at = next;
+  }
+  return { json, blob };
 }
 
 async function draftPlan(prompt, lengthMs, model) {
@@ -374,7 +475,7 @@ const el = {
   lengthHint: $('length-hint'), model: $('model'), mode: $('mode'), generate: $('generate'), cancel: $('cancel'),
   status: $('status'), error: $('error'), takes: $('takes'), takesEmpty: $('takes-empty'), takesCount: $('takes-count'),
   settings: $('settings'), apiKey: $('api-key'), apiBase: $('api-base'), keyCheck: $('key-check'),
-  banner: $('setup-banner'), topic: $('topic'), draftBtn: $('draft-btn'),
+  banner: $('setup-banner'), topic: $('topic'), draftBtn: $('draft-btn'), store: $('store'),
 };
 
 function formState() {
@@ -390,6 +491,7 @@ function formState() {
     lengthSec: parseInt(el.length.value, 10),
     model: el.model.value,
     mode: el.mode.value,
+    store: el.store.checked,
   };
 }
 
@@ -409,6 +511,7 @@ function loadDraft() {
   if (d.lengthSec) el.length.value = d.lengthSec;
   if (d.model) el.model.value = d.model;
   if (d.mode) el.mode.value = d.mode;
+  if (typeof d.store === 'boolean') el.store.checked = d.store;
   for (const b of el.moods.querySelectorAll('.chip')) b.setAttribute('aria-pressed', String((d.moods || []).includes(b.dataset.mood)));
   const out = document.querySelector(`input[name=output][value=${['song', 'acappella', 'instrumental'].includes(d.output) ? d.output : 'song'}]`);
   if (out) out.checked = true;
@@ -462,7 +565,8 @@ async function generate() {
   const tick = setInterval(() => setStatus(`Generating ${fmtSec(req.totalMs)} of audio… ${Math.round((Date.now() - started) / 1000)}s`, 'busy'), 1000);
   setStatus(`Generating ${fmtSec(req.totalMs)} of audio…`, 'busy');
   try {
-    const blob = await compose(req.body, ctrl.signal);
+    const store = el.store.checked && o.output !== 'instrumental';
+    const { blob, songId, storeNote } = await compose(req.body, ctrl.signal, store);
     const firstLine = parseLyrics(o.lyrics).flatMap(s => s.lines)[0] || '';
     const take = {
       id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
@@ -472,6 +576,8 @@ async function generate() {
       mode: o.mode,
       output: o.output,
       lyrics: o.lyrics,
+      sections: req.sections || null,
+      songId: songId || null,
       plannedMs: req.totalMs,
       request: req.body,
       mime: blob.type || 'audio/mpeg',
@@ -479,7 +585,7 @@ async function generate() {
     };
     await db.add(take);
     await renderTakes();
-    setStatus(`Done in ${Math.round((Date.now() - started) / 1000)}s. Your take is on the right.`, 'ok');
+    setStatus(`Done in ${Math.round((Date.now() - started) / 1000)}s. Your take is on the right.` + (storeNote ? ' ' + storeNote : ''), storeNote ? '' : 'ok');
   } catch (err) {
     setStatus('');
     showError(err.message || String(err));
@@ -506,11 +612,12 @@ async function renderTakes() {
     <article class="take" data-id="${esc(t.id)}">
       <div class="head">
         <h3>${esc(t.title)}</h3>
-        <span class="meta">${esc(OUTPUT_LABEL[t.output] || t.output)} · ${esc(t.model)} · ${fmtSec(t.plannedMs)} · ${new Date(t.createdAt).toLocaleString()}</span>
+        <span class="meta">${esc(OUTPUT_LABEL[t.output] || t.output)} · ${esc(t.model)} · ${fmtSec(t.plannedMs)} · ${new Date(t.createdAt).toLocaleString()}${t.songId ? ' · <span class="badge">editable</span>' : ''}</span>
       </div>
       <audio controls preload="metadata" src="${urlFor(t)}"></audio>
       <div class="tools">
         <a class="btn ghost small" href="${urlFor(t)}" download="${esc(fileName(t))}">Download MP3</a>
+        ${canRewrite(t) ? '<button type="button" class="btn ghost small" data-act="rewrite">Rewrite a section</button>' : ''}
         <button type="button" class="btn ghost small" data-act="reuse">Load settings</button>
         <button type="button" class="btn ghost small danger" data-act="delete">Delete</button>
       </div>
@@ -535,6 +642,10 @@ el.takes.addEventListener('click', async e => {
     await db.del(id);
     if (urls.has(id)) { URL.revokeObjectURL(urls.get(id)); urls.delete(id); }
     renderTakes();
+  } else if (btn.dataset.act === 'rewrite') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (t) openRewrite(t);
   } else if (btn.dataset.act === 'reuse') {
     const takes = await db.all();
     const t = takes.find(x => x.id === id);
@@ -585,6 +696,7 @@ el.moods.addEventListener('click', e => {
 
 for (const input of [el.lyrics, el.length, el.mode]) input.addEventListener('input', () => { renderStructure(); saveDraft(); });
 for (const input of [el.genre, el.voice, el.tempo, el.extra, el.avoid, el.model]) input.addEventListener('input', saveDraft);
+el.store.addEventListener('change', saveDraft);
 for (const r of document.querySelectorAll('input[name=output]')) r.addEventListener('change', () => { renderStructure(); saveDraft(); });
 
 el.generate.addEventListener('click', generate);
@@ -612,6 +724,153 @@ el.draftBtn.addEventListener('click', async () => {
     showError(err.message || String(err));
   } finally {
     el.draftBtn.disabled = false;
+  }
+});
+
+// ---------- Rewriting sections (inpainting) ----------
+
+/** Sections of a take with their lengths and styles, derived for takes made before this was stored. */
+function sectionsOf(t) {
+  if (Array.isArray(t.sections) && t.sections.length) return t.sections;
+  const chunks = t.request && t.request.composition_plan && t.request.composition_plan.chunks;
+  if (!chunks || t.lyrics == null) return null;
+  const parsed = parseLyrics(t.lyrics);
+  if (parsed.length !== chunks.length) return null;
+  return parsed.map((s, i) => ({ name: s.name, lines: s.lines, ms: chunks[i].duration_ms, pos: chunks[i].positive_styles || [], neg: chunks[i].negative_styles || [] }));
+}
+
+function canRewrite(t) {
+  return t.output !== 'instrumental' && t.model !== 'music_v1' && !!sectionsOf(t);
+}
+
+function sectionsToLyrics(sections) {
+  return sections.map(s => `[${s.name} ${fmtSec(s.ms)}]\n${s.lines.join('\n')}`).join('\n\n') + '\n';
+}
+
+let rwTake = null;
+const rw = {
+  dialog: $('rewrite'), sections: $('rw-sections'), cost: $('rw-cost'), status: $('rw-status'), error: $('rw-error'),
+  upload: $('rw-upload'), title: $('rw-title'), go: $('rw-go'), cancel: $('rw-cancel'),
+};
+
+function openRewrite(t) {
+  rwTake = t;
+  const secs = sectionsOf(t);
+  rw.title.textContent = t.title;
+  rw.upload.hidden = !!t.songId;
+  rw.sections.innerHTML = secs.map((s, i) => `
+    <div class="rw-sec" data-i="${i}">
+      <label class="rw-head"><input type="checkbox" class="rw-pick"> <b>${esc(s.name)}</b> <span class="meta">· ${fmtSec(s.ms)}${s.lines.length ? '' : ' · no words'}</span></label>
+      <textarea class="rw-text" rows="${Math.min(12, Math.max(2, s.lines.length + 1))}" data-orig="${esc(s.lines.join('\n'))}">${esc(s.lines.join('\n'))}</textarea>
+    </div>`).join('');
+  rw.error.hidden = true;
+  rw.status.textContent = '';
+  rw.status.className = 'status';
+  rw.go.disabled = false;
+  updateRewriteCost();
+  rw.dialog.showModal();
+}
+
+function rewritePicks() {
+  return [...rw.sections.querySelectorAll('.rw-sec')].map(div => ({
+    pick: div.querySelector('.rw-pick').checked,
+    text: div.querySelector('.rw-text').value,
+  }));
+}
+
+function updateRewriteCost() {
+  if (!rwTake) return;
+  const secs = sectionsOf(rwTake);
+  const picks = rewritePicks();
+  const redo = secs.filter((s, i) => picks[i].pick);
+  const ms = redo.reduce((a, s) => a + s.ms, 0);
+  rw.cost.textContent = redo.length
+    ? `Regenerating ${redo.length} section${redo.length === 1 ? '' : 's'} (${fmtSec(ms)} of audio, the only part charged). The other ${fmtSec(secs.reduce((a, s) => a + s.ms, 0) - ms)} is kept as it is.`
+    : 'Tick the sections to regenerate, or just edit their lines.';
+}
+
+rw.sections.addEventListener('input', e => {
+  const ta = e.target.closest('.rw-text');
+  if (ta) {
+    const changed = ta.value.trim() !== ta.dataset.orig.trim();
+    if (changed) ta.closest('.rw-sec').querySelector('.rw-pick').checked = true;
+  }
+  updateRewriteCost();
+});
+rw.cancel.addEventListener('click', () => rw.dialog.close());
+
+rw.go.addEventListener('click', async () => {
+  const t = rwTake;
+  if (!t) return;
+  const secs = sectionsOf(t);
+  const picks = rewritePicks();
+  rw.error.hidden = true;
+  if (!picks.some(p => p.pick)) { rw.error.textContent = 'Tick at least one section to regenerate.'; rw.error.hidden = false; return; }
+  const newSections = secs.map((s, i) => {
+    const lines = picks[i].pick ? picks[i].text.split(/\r?\n/).map(l => l.trim()).filter(Boolean) : s.lines;
+    return { ...s, lines };
+  });
+  const problems = [];
+  newSections.forEach((s, i) => {
+    if (!picks[i].pick) return;
+    if (s.lines.length > LIMITS.maxLinesPerChunk) problems.push(`[${s.name}] has ${s.lines.length} lines; the limit is ${LIMITS.maxLinesPerChunk}.`);
+    const long = s.lines.find(l => l.length > LIMITS.maxLineChars);
+    if (long) problems.push(`A line in [${s.name}] is longer than ${LIMITS.maxLineChars} characters.`);
+  });
+  if (problems.length) { rw.error.textContent = problems.join('\n'); rw.error.hidden = false; return; }
+
+  rw.go.disabled = true;
+  const started = Date.now();
+  const busy = msg => { rw.status.textContent = msg; rw.status.className = 'status busy'; };
+  try {
+    let songId = t.songId;
+    if (!songId) {
+      busy('Uploading the original take to ElevenLabs…');
+      songId = await uploadForInpainting(t.blob);
+      t.songId = songId;
+      await db.add(t);
+    }
+    const model = t.model === 'music_v2' ? 'music_v2' : 'music_v2_5';
+    let offset = 0;
+    const chunks = newSections.map((s, i) => {
+      const chunk = picks[i].pick
+        ? { text: s.lines.join('\n'), duration_ms: s.ms, positive_styles: s.pos || [], negative_styles: s.neg || [], context_adherence: 'high' }
+        : { song_id: songId, range: { start_ms: offset, end_ms: offset + s.ms } };
+      offset += s.ms;
+      return chunk;
+    });
+    const body = { model_id: model, composition_plan: { chunks }, force_instrumental: false };
+    const redoMs = newSections.filter((s, i) => picks[i].pick).reduce((a, s) => a + s.ms, 0);
+    const tick = setInterval(() => busy(`Regenerating ${fmtSec(redoMs)}… ${Math.round((Date.now() - started) / 1000)}s`), 1000);
+    busy(`Regenerating ${fmtSec(redoMs)}…`);
+    let result;
+    try { result = await compose(body, undefined, true); } finally { clearInterval(tick); }
+    const take = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
+      createdAt: Date.now(),
+      title: t.title.replace(/ \(rewrite( \d+)?\)$/, '') + ' (rewrite)',
+      model, mode: 'structured', output: t.output,
+      lyrics: sectionsToLyrics(newSections),
+      sections: newSections,
+      songId: result.songId || null,
+      parentId: t.id,
+      plannedMs: offset,
+      request: body,
+      mime: result.blob.type || 'audio/mpeg',
+      blob: result.blob,
+    };
+    await db.add(take);
+    await renderTakes();
+    rw.dialog.close();
+    setStatus(`Rewrite done in ${Math.round((Date.now() - started) / 1000)}s. The new take is at the top of the list.` + (result.storeNote ? ' ' + result.storeNote : ''), result.storeNote ? '' : 'ok');
+    showError('');
+  } catch (err) {
+    rw.status.textContent = '';
+    rw.status.className = 'status';
+    rw.error.textContent = err.message || String(err);
+    rw.error.hidden = false;
+  } finally {
+    rw.go.disabled = false;
   }
 });
 
@@ -676,4 +935,4 @@ renderTakes();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 // Exposed for tests and for poking around in the console.
-window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, LIMITS };
+window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, parseDetailed, sectionsOf, LIMITS };

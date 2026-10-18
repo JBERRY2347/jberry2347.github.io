@@ -63,6 +63,24 @@ the plan is sent in the v1 "sections" format instead.
 **Freeform** puts the lyrics inside a plain prompt and lets the model decide the structure.
 Use it if you want the model to take more liberties, or if your lyrics have no sections.
 
+## Rewriting a few lines without redoing the song
+
+Every take made with **Keep this take editable** ticked is stored on ElevenLabs and gets an
+"editable" badge. Press **Rewrite a section** on it, edit the lines you want changed, tick the
+sections to regenerate, and press **Regenerate ticked sections**. The app sends a plan that keeps
+every untouched section as a reference to the original audio and generates only the ticked ones,
+so the rest of the song stays exactly as it was and only the regenerated seconds are charged. The
+result lands as a new take named "… (rewrite)", itself editable again.
+
+Notes:
+
+- Section lengths stay the same on a rewrite. To change the structure, generate a new song.
+- Rewriting needs the v2 or v2.5 model and a structured take. Freeform, instrumental and
+  `music_v1` takes have no section map, so they can't be rewritten; use **Load settings** instead.
+- A take made with the box unticked (or one ElevenLabs could not store) can still be rewritten:
+  the app first uploads the original MP3 to ElevenLabs to get a song id. Both storing and uploading
+  depend on your ElevenLabs plan; if either is refused, the error says so and the take stays as it is.
+
 ## If the browser blocks the call
 
 The app calls `https://api.elevenlabs.io` straight from the page. If that is refused by the
@@ -75,7 +93,7 @@ and adds the CORS headers; it does not store your key.
 
 | File | Purpose |
 |---|---|
-| `index.html`, `app.css`, `app.js` | The app. All logic is in `app.js`; `window.VocalForge` exposes the lyric parser and request builder for tinkering. |
+| `index.html`, `app.css`, `app.js` | The app. All logic is in `app.js`; `window.VocalForge` exposes the lyric parser, request builder and multipart parser for tinkering. |
 | `manifest.json`, `sw.js`, `icon*` | PWA bits so it installs as its own app and opens offline. |
 | `privacy.html` | What is stored where. |
 | `relay/cloudflare-worker.js` | Optional CORS relay, see above. |
