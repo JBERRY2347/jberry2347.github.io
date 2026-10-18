@@ -35,6 +35,20 @@
       "platforms": ["web"],
       "privacy": "./holdtheline/privacy.html",
       "status": "live"
+    },
+    {
+      "id": "vocalforge",
+      "name": "VocalForge",
+      "tagline": "AI vocals for your lyrics",
+      "description": "Type lyrics, pick a voice and a style, and get them sung: a full song with backing music, an a cappella vocal to drop on your own beat, or an instrumental. Uses the ElevenLabs Music API with your own key, which never leaves your browser.",
+      "url": "./vocalforge/",
+      "repo": "https://github.com/JBERRY2347/jberry2347.github.io/tree/main/vocalforge",
+      "icon": "./vocalforge/icon-192.png",
+      "category": "Music",
+      "tags": ["lyrics", "music", "bring your own key", "PWA"],
+      "platforms": ["web"],
+      "privacy": "./vocalforge/privacy.html",
+      "status": "beta"
     }
   ]
 }
