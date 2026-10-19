@@ -136,3 +136,10 @@ footer a { color: var(--muted); }
 .rw-head input { accent-color: var(--accent); }
 .rw-sec textarea { min-height: 0; background: var(--bg); }
 #rw-sections { max-height: 50vh; overflow: auto; }
+
+.karaoke { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 10px; max-height: 260px; overflow: auto; font-size: 1.05rem; line-height: 1.7; }
+.kline { margin: 0 0 4px; }
+.kw { color: var(--muted); cursor: pointer; transition: color .1s; }
+.kw.done { color: var(--text); }
+.kw.now { color: #fff; background: var(--grad); border-radius: 6px; padding: 0 4px; }
+.take .tools [aria-pressed="true"] { color: var(--text); border-color: var(--accent); }

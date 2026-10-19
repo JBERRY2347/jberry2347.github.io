@@ -294,22 +294,31 @@ async function callApi(path, init) {
     With `store`, the detailed endpoint is asked to keep the song on ElevenLabs (store_for_inpainting) so
     single sections can be rewritten later; that gives back a song_id. If ElevenLabs refuses that request
     with a 4xx that is not about the key or credits, we fall back to the plain endpoint and say so. */
-async function compose(body, signal, store) {
-  let storeNote = null;
-  if (store) {
+async function compose(body, signal, store, totalMs, timestamps = true) {
+  const notes = [];
+  // The detailed endpoint gives word timestamps (karaoke) and, when storing, a song id (rewrites).
+  // Try it with storing, then without, before falling back to the plain endpoint; each refusal is reported.
+  const attempts = [];
+  if (store) attempts.push({ store_for_inpainting: true, with_timestamps: timestamps });
+  if (timestamps) attempts.push({ with_timestamps: true });
+  for (const extra of attempts) {
     try {
       const res = await callApi(`/v1/music/detailed?output_format=${OUTPUT_FORMAT}`, {
-        method: 'POST', body: JSON.stringify({ ...body, store_for_inpainting: true }),
+        method: 'POST', body: JSON.stringify({ ...body, ...extra }),
         headers: { Accept: 'multipart/mixed, application/json' }, signal,
       });
       const { json, blob } = await parseDetailed(res);
       if (!blob || !blob.size) throw new Error('The API returned no audio in its detailed response.');
       const songId = findKey(json, 'song_id');
-      return { blob, songId: typeof songId === 'string' ? songId : null, detail: json, storeNote: songId ? null : 'ElevenLabs did not return a song id, so this take cannot be rewritten by section.' };
+      const words = extractWords(json, totalMs);
+      if (store && !extra.store_for_inpainting) notes.push('Generated without storing, so this take cannot be rewritten by section.');
+      else if (store && typeof songId !== 'string') notes.push('ElevenLabs did not return a song id, so this take cannot be rewritten by section.');
+      if (timestamps && !words.length) notes.push('No word timing came back, so there is no karaoke view for this take.');
+      return { blob, songId: typeof songId === 'string' ? songId : null, words, detail: json, storeNote: notes.join(' ') || null };
     } catch (err) {
       const code = (err.message || '').match(/^(\d{3}) /);
       if (!code || ['401', '402', '429'].includes(code[1])) throw err;
-      storeNote = `Not stored for rewrites: ElevenLabs refused the stored generation (${err.message.split('\n')[0]}). Generated without storing instead.`;
+      notes.push(`ElevenLabs refused the ${extra.store_for_inpainting ? 'stored' : 'detailed'} generation (${err.message.split('\n')[0]}).`);
     }
   }
   const res = await callApi(`/v1/music?output_format=${OUTPUT_FORMAT}`, {
@@ -317,17 +326,56 @@ async function compose(body, signal, store) {
   });
   const blob = await res.blob();
   if (!blob.size) throw new Error('The API returned an empty audio file.');
-  return { blob, songId: null, detail: null, storeNote };
+  if (attempts.length) notes.push('Generated plainly: no section rewrites and no karaoke timing for this take.');
+  return { blob, songId: null, words: [], detail: null, storeNote: notes.join(' ') || null };
+}
+
+/** Pull word timestamps out of the detailed response, whatever ElevenLabs calls the fields.
+    Returns [{ text, start, end }] with times in milliseconds, sorted by start. */
+function extractWords(json, totalMs) {
+  let raw = findKey(json, 'words_timestamps') ?? findKey(json, 'word_timestamps') ?? findKey(json, 'words');
+  if (!Array.isArray(raw)) return [];
+  raw = raw.flat(2).filter(w => w && typeof w === 'object');
+  const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v) ? +v : null));
+  let unitHint = null;
+  const items = raw.map(w => {
+    const text = String(w.word ?? w.text ?? w.value ?? '').trim();
+    let start = num(w.start_ms ?? w.start_time_ms);
+    let end = num(w.end_ms ?? w.end_time_ms);
+    if (start != null || end != null) unitHint = 'ms';
+    if (start == null) start = num(w.start ?? w.start_time ?? w.start_s ?? w.start_seconds ?? w.timestamp);
+    if (end == null) end = num(w.end ?? w.end_time ?? w.end_s ?? w.end_seconds);
+    return { text, start, end };
+  }).filter(w => w.text && w.start != null);
+  if (!items.length) return [];
+  if (unitHint !== 'ms') {
+    // Decide between seconds and milliseconds from the largest time seen.
+    const maxT = Math.max(...items.map(w => Math.max(w.start, w.end ?? w.start)));
+    const seconds = totalMs ? maxT <= (totalMs / 1000) * 1.5 : maxT < 1200;
+    if (seconds) items.forEach(w => { w.start *= 1000; if (w.end != null) w.end *= 1000; });
+  }
+  items.sort((a, b) => a.start - b.start);
+  items.forEach((w, i) => {
+    if (w.end == null || w.end < w.start) w.end = i + 1 < items.length ? items[i + 1].start : w.start + 400;
+    w.start = Math.round(w.start); w.end = Math.round(w.end);
+  });
+  return items.filter(w => !/^[\[(].*[\])]$/.test(w.text));
 }
 
 /** Upload an existing take so ElevenLabs can use it as inpainting source. Returns its song_id. */
-async function uploadForInpainting(blob) {
+async function uploadTake(blob, { timestamps = false, totalMs = 0 } = {}) {
   const fd = new FormData();
   fd.append('file', blob, 'take.mp3');
+  if (timestamps) fd.append('with_timestamps', 'true');
   const res = await callApi('/v1/music/upload', { method: 'POST', body: fd });
   const json = await res.json();
   const songId = findKey(json, 'song_id');
-  if (typeof songId !== 'string') throw new Error('The upload succeeded but no song id came back: ' + JSON.stringify(json).slice(0, 200));
+  return { songId: typeof songId === 'string' ? songId : null, words: extractWords(json, totalMs), json };
+}
+
+async function uploadForInpainting(blob) {
+  const { songId, json } = await uploadTake(blob);
+  if (!songId) throw new Error('The upload succeeded but no song id came back: ' + JSON.stringify(json).slice(0, 200));
   return songId;
 }
 
@@ -566,7 +614,7 @@ async function generate() {
   setStatus(`Generating ${fmtSec(req.totalMs)} of audio…`, 'busy');
   try {
     const store = el.store.checked && o.output !== 'instrumental';
-    const { blob, songId, storeNote } = await compose(req.body, ctrl.signal, store);
+    const { blob, songId, words, storeNote } = await compose(req.body, ctrl.signal, store, req.totalMs, o.output !== 'instrumental');
     const firstLine = parseLyrics(o.lyrics).flatMap(s => s.lines)[0] || '';
     const take = {
       id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
@@ -578,6 +626,7 @@ async function generate() {
       lyrics: o.lyrics,
       sections: req.sections || null,
       songId: songId || null,
+      words: words || [],
       plannedMs: req.totalMs,
       request: req.body,
       mime: blob.type || 'audio/mpeg',
@@ -612,15 +661,17 @@ async function renderTakes() {
     <article class="take" data-id="${esc(t.id)}">
       <div class="head">
         <h3>${esc(t.title)}</h3>
-        <span class="meta">${esc(OUTPUT_LABEL[t.output] || t.output)} · ${esc(t.model)} · ${fmtSec(t.plannedMs)} · ${new Date(t.createdAt).toLocaleString()}${t.songId ? ' · <span class="badge">editable</span>' : ''}</span>
+        <span class="meta">${esc(OUTPUT_LABEL[t.output] || t.output)} · ${esc(t.model)} · ${fmtSec(t.plannedMs)} · ${new Date(t.createdAt).toLocaleString()}${t.songId ? ' · <span class="badge">editable</span>' : ''}${hasWords(t) ? ' · <span class="badge">timed</span>' : ''}</span>
       </div>
       <audio controls preload="metadata" src="${urlFor(t)}"></audio>
       <div class="tools">
         <a class="btn ghost small" href="${urlFor(t)}" download="${esc(fileName(t))}">Download MP3</a>
+        ${hasWords(t) ? '<button type="button" class="btn ghost small" data-act="karaoke" aria-pressed="false">Karaoke</button><button type="button" class="btn ghost small" data-act="lrc">Lyrics .lrc</button><button type="button" class="btn ghost small" data-act="srt">Subtitles .srt</button>' : (t.output !== 'instrumental' ? '<button type="button" class="btn ghost small" data-act="timing">Get word timing</button>' : '')}
         ${canRewrite(t) ? '<button type="button" class="btn ghost small" data-act="rewrite">Rewrite a section</button>' : ''}
         <button type="button" class="btn ghost small" data-act="reuse">Load settings</button>
         <button type="button" class="btn ghost small danger" data-act="delete">Delete</button>
       </div>
+      <div class="karaoke" hidden></div>
       <details><summary>Request sent to the API</summary><pre>${esc(JSON.stringify(t.request, null, 2))}</pre></details>
     </article>`).join('');
 }
@@ -646,6 +697,43 @@ el.takes.addEventListener('click', async e => {
     const takes = await db.all();
     const t = takes.find(x => x.id === id);
     if (t) openRewrite(t);
+  } else if (btn.dataset.act === 'karaoke') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (t) toggleKaraoke(art, t, btn);
+  } else if (btn.dataset.act === 'lrc' || btn.dataset.act === 'srt') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (!t) return;
+    const lrc = btn.dataset.act === 'lrc';
+    const text = lrc ? toLRC(t) : toSRT(t);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    a.download = fileName(t).replace(/\.mp3$/, lrc ? '.lrc' : '.srt');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } else if (btn.dataset.act === 'timing') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (!t) return;
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    showError('');
+    try {
+      const { songId, words } = await uploadTake(t.blob, { timestamps: true, totalMs: t.plannedMs });
+      if (songId && !t.songId) t.songId = songId;
+      if (!words.length) throw new Error('ElevenLabs accepted the upload but returned no word timing for it.');
+      t.words = words;
+      await db.add(t);
+      await renderTakes();
+      setStatus(`Word timing added: ${words.length} words.`, 'ok');
+    } catch (err) {
+      showError(err.message || String(err));
+      btn.disabled = false;
+      btn.textContent = 'Get word timing';
+    }
   } else if (btn.dataset.act === 'reuse') {
     const takes = await db.all();
     const t = takes.find(x => x.id === id);
@@ -726,6 +814,104 @@ el.draftBtn.addEventListener('click', async () => {
     el.draftBtn.disabled = false;
   }
 });
+
+// ---------- Karaoke: word timing, display and export ----------
+
+function hasWords(t) { return Array.isArray(t.words) && t.words.length > 0; }
+
+const normTok = s => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
+
+/** Group timed words into lines. Uses the take's lyric lines when they exist (count-based with
+    token matching to resync), otherwise splits on pauses. Returns [{ words: [{text,start,end}] }]. */
+function groupWords(words, lyricLines) {
+  const lines = [];
+  const toks = (lyricLines || []).map(l => l.split(/\s+/).map(normTok).filter(Boolean)).filter(l => l.length);
+  if (toks.length) {
+    let wi = 0;
+    for (let li = 0; li < toks.length && wi < words.length; li++) {
+      const line = { words: [] };
+      let ti = 0;
+      while (wi < words.length && ti < toks[li].length) {
+        const w = words[wi];
+        const nw = normTok(w.text);
+        if (nw === toks[li][ti] || !nw) { line.words.push(w); wi++; ti++; continue; }
+        // Resync: does this API word start the next line, or does the lyric token appear a little later?
+        const nextLine = toks[li + 1];
+        if (nextLine && nw === nextLine[0] && ti >= Math.ceil(toks[li].length / 2)) break;
+        const ahead = toks[li].slice(ti + 1, ti + 3).indexOf(nw);
+        if (ahead !== -1) { ti += ahead + 1; line.words.push(w); wi++; ti++; continue; }
+        line.words.push(w); wi++; ti++;
+      }
+      if (line.words.length) lines.push(line);
+    }
+    if (wi < words.length) lines.push({ words: words.slice(wi) });
+    return lines;
+  }
+  let cur = { words: [] };
+  words.forEach((w, i) => {
+    const prev = words[i - 1];
+    if (cur.words.length && (w.start - prev.end > 700 || cur.words.length >= 10)) { lines.push(cur); cur = { words: [] }; }
+    cur.words.push(w);
+  });
+  if (cur.words.length) lines.push(cur);
+  return lines;
+}
+
+function lyricLinesOf(t) {
+  const secs = sectionsOf(t);
+  if (secs) return secs.flatMap(s => s.lines);
+  if (t.lyrics) return parseLyrics(t.lyrics).flatMap(s => s.lines);
+  return [];
+}
+
+const lrcTime = ms => { const m = Math.floor(ms / 60000), sec = (ms % 60000) / 1000; return `${String(m).padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`; };
+const srtTime = ms => { const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60, f = ms % 1000; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(f).padStart(3, '0')}`; };
+
+/** Enhanced LRC: a line tag plus a tag before every word, which karaoke players use to highlight word by word. */
+function toLRC(t) {
+  const out = [`[ti:${t.title}]`, '[ar:VocalForge]', `[length:${lrcTime(t.plannedMs || 0)}]`, '[re:VocalForge]', ''];
+  for (const line of groupWords(t.words, lyricLinesOf(t))) {
+    out.push(`[${lrcTime(line.words[0].start)}]` + line.words.map(w => `<${lrcTime(w.start)}>${w.text}`).join(' ') + `<${lrcTime(line.words[line.words.length - 1].end)}>`);
+  }
+  return out.join('\n') + '\n';
+}
+
+function toSRT(t) {
+  return groupWords(t.words, lyricLinesOf(t)).map((line, i) =>
+    `${i + 1}\n${srtTime(line.words[0].start)} --> ${srtTime(line.words[line.words.length - 1].end)}\n${line.words.map(w => w.text).join(' ')}\n`
+  ).join('\n');
+}
+
+const karaokeLoops = new Map();
+function toggleKaraoke(art, t, btn) {
+  const box = art.querySelector('.karaoke');
+  const audio = art.querySelector('audio');
+  const on = box.hidden;
+  btn.setAttribute('aria-pressed', String(on));
+  if (!on) { box.hidden = true; box.innerHTML = ''; cancelAnimationFrame(karaokeLoops.get(t.id)); karaokeLoops.delete(t.id); return; }
+  const lines = groupWords(t.words, lyricLinesOf(t));
+  box.innerHTML = lines.map(line => '<p class="kline">' + line.words.map(w => `<span class="kw" data-s="${w.start}" data-e="${w.end}">${esc(w.text)}</span>`).join(' ') + '</p>').join('');
+  box.hidden = false;
+  const spans = [...box.querySelectorAll('.kw')];
+  let lastLine = null;
+  const paint = ms => {
+    let cur = null;
+    for (const sp of spans) {
+      const s = +sp.dataset.s, e = +sp.dataset.e;
+      const state = ms >= e ? 'done' : (ms >= s ? 'now' : '');
+      if (sp.dataset.state !== state) { sp.dataset.state = state; sp.className = 'kw' + (state ? ' ' + state : ''); }
+      if (state === 'now') cur = sp;
+    }
+    const line = cur && cur.parentElement;
+    if (line && line !== lastLine) { lastLine = line; line.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  };
+  const loop = () => { paint(audio.currentTime * 1000); karaokeLoops.set(t.id, requestAnimationFrame(loop)); };
+  loop();
+  box.addEventListener('click', e => {
+    const sp = e.target.closest('.kw');
+    if (sp) { audio.currentTime = +sp.dataset.s / 1000; audio.play().catch(() => {}); }
+  });
+}
 
 // ---------- Rewriting sections (inpainting) ----------
 
@@ -844,7 +1030,7 @@ rw.go.addEventListener('click', async () => {
     const tick = setInterval(() => busy(`Regenerating ${fmtSec(redoMs)}… ${Math.round((Date.now() - started) / 1000)}s`), 1000);
     busy(`Regenerating ${fmtSec(redoMs)}…`);
     let result;
-    try { result = await compose(body, undefined, true); } finally { clearInterval(tick); }
+    try { result = await compose(body, undefined, true, offset); } finally { clearInterval(tick); }
     const take = {
       id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
       createdAt: Date.now(),
@@ -853,6 +1039,7 @@ rw.go.addEventListener('click', async () => {
       lyrics: sectionsToLyrics(newSections),
       sections: newSections,
       songId: result.songId || null,
+      words: result.words || [],
       parentId: t.id,
       plannedMs: offset,
       request: body,
@@ -935,4 +1122,4 @@ renderTakes();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 // Exposed for tests and for poking around in the console.
-window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, parseDetailed, sectionsOf, LIMITS };
+window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, parseDetailed, sectionsOf, extractWords, groupWords, toLRC, toSRT, LIMITS };
