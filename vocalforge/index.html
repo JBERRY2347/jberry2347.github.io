@@ -146,6 +146,11 @@ We're chasing down the falling stars"></textarea>
       </div>
     </div>
 
+    <label class="check">
+      <input type="checkbox" id="store" checked>
+      <span><b>Keep this take editable.</b> Stores the song on ElevenLabs so you can rewrite single sections later without regenerating the rest. Not every plan allows it; if yours doesn't, the take is generated normally and the app tells you.</span>
+    </label>
+
     <div class="actions">
       <button type="button" class="btn primary big" id="generate">Generate vocals</button>
       <button type="button" class="btn ghost big" id="cancel" hidden>Cancel</button>
@@ -183,6 +188,22 @@ We're chasing down the falling stars"></textarea>
       <button type="button" class="btn ghost" id="key-check-btn">Check key</button>
       <button type="button" class="btn ghost" id="key-forget">Forget key</button>
       <button type="submit" class="btn primary" id="settings-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="rewrite" aria-labelledby="h-rewrite">
+  <form method="dialog" class="dialog-body">
+    <h2 id="h-rewrite">Rewrite sections</h2>
+    <p class="hint">Edit the lines you want changed in <b id="rw-title"></b>. Only ticked sections are regenerated and charged; every other section is kept exactly as it sounds now. Section lengths stay the same.</p>
+    <p class="hint" id="rw-upload" hidden>This take was not stored on ElevenLabs when it was made, so it will be uploaded first to make it editable.</p>
+    <div id="rw-sections"></div>
+    <p class="status" id="rw-cost"></p>
+    <p class="status" id="rw-status" role="status" aria-live="polite"></p>
+    <p class="error" id="rw-error" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="rw-cancel">Cancel</button>
+      <button type="button" class="btn primary" id="rw-go">Regenerate ticked sections</button>
     </div>
   </form>
 </dialog>

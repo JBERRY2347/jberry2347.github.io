@@ -125,3 +125,21 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 
 footer { margin: 32px auto 0; max-width: 1140px; color: var(--muted); font-size: .85rem; text-align: center; }
 footer a { color: var(--muted); }
+
+.check { display: flex; gap: 10px; align-items: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 4px; font-size: .88rem; color: var(--muted); cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); flex: none; }
+.check b { color: var(--text); font-weight: 600; }
+.badge { color: var(--ok); background: rgba(61,220,151,.12); padding: 1px 7px; border-radius: 6px; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+.rw-sec { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.rw-sec:has(.rw-pick:checked) { border-color: var(--accent); }
+.rw-head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; cursor: pointer; }
+.rw-head input { accent-color: var(--accent); }
+.rw-sec textarea { min-height: 0; background: var(--bg); }
+#rw-sections { max-height: 50vh; overflow: auto; }
+
+.karaoke { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 10px; max-height: 260px; overflow: auto; font-size: 1.05rem; line-height: 1.7; }
+.kline { margin: 0 0 4px; }
+.kw { color: var(--muted); cursor: pointer; transition: color .1s; }
+.kw.done { color: var(--text); }
+.kw.now { color: #fff; background: var(--grad); border-radius: 6px; padding: 0 4px; }
+.take .tools [aria-pressed="true"] { color: var(--text); border-color: var(--accent); }

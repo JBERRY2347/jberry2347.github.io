@@ -63,6 +63,39 @@ the plan is sent in the v1 "sections" format instead.
 **Freeform** puts the lyrics inside a plain prompt and lets the model decide the structure.
 Use it if you want the model to take more liberties, or if your lyrics have no sections.
 
+## Rewriting a few lines without redoing the song
+
+Every take made with **Keep this take editable** ticked is stored on ElevenLabs and gets an
+"editable" badge. Press **Rewrite a section** on it, edit the lines you want changed, tick the
+sections to regenerate, and press **Regenerate ticked sections**. The app sends a plan that keeps
+every untouched section as a reference to the original audio and generates only the ticked ones,
+so the rest of the song stays exactly as it was and only the regenerated seconds are charged. The
+result lands as a new take named "… (rewrite)", itself editable again.
+
+Notes:
+
+- Section lengths stay the same on a rewrite. To change the structure, generate a new song.
+- Rewriting needs the v2 or v2.5 model and a structured take. Freeform, instrumental and
+  `music_v1` takes have no section map, so they can't be rewritten; use **Load settings** instead.
+- A take made with the box unticked (or one ElevenLabs could not store) can still be rewritten:
+  the app first uploads the original MP3 to ElevenLabs to get a song id. Both storing and uploading
+  depend on your ElevenLabs plan; if either is refused, the error says so and the take stays as it is.
+
+## Karaoke: word timing, LRC and SRT
+
+Every take generated through the detailed endpoint (the default) asks ElevenLabs for the timing of
+each sung word and keeps it with the take, shown as a "timed" badge. On such a take:
+
+- **Karaoke** shows the lyrics under the player with the current word highlighted as it plays.
+  Click any word to jump there.
+- **Lyrics .lrc** downloads an enhanced LRC file, with a time tag on every word, named to match the
+  MP3 so karaoke players and most music apps pick it up automatically.
+- **Subtitles .srt** downloads one subtitle per lyric line for video editors.
+
+Words are grouped into the lines you wrote. A take without timing (made with the plain endpoint, or
+before this feature) shows **Get word timing**, which uploads the MP3 to ElevenLabs and asks for the
+timestamps; whether that is allowed depends on your plan.
+
 ## If the browser blocks the call
 
 The app calls `https://api.elevenlabs.io` straight from the page. If that is refused by the
@@ -75,7 +108,7 @@ and adds the CORS headers; it does not store your key.
 
 | File | Purpose |
 |---|---|
-| `index.html`, `app.css`, `app.js` | The app. All logic is in `app.js`; `window.VocalForge` exposes the lyric parser and request builder for tinkering. |
+| `index.html`, `app.css`, `app.js` | The app. All logic is in `app.js`; `window.VocalForge` exposes the lyric parser, request builder and multipart parser for tinkering. |
 | `manifest.json`, `sw.js`, `icon*` | PWA bits so it installs as its own app and opens offline. |
 | `privacy.html` | What is stored where. |
 | `relay/cloudflare-worker.js` | Optional CORS relay, see above. |

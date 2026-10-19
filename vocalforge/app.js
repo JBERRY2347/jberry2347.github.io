@@ -230,7 +230,12 @@ function buildRequest(o) {
   }
   const body = { model_id: o.model, composition_plan: plan, force_instrumental: false };
   if (o.model === 'music_v1') body.respect_sections_durations = true;
-  return { problems, totalMs, body, sections };
+  const summary = sections.map((s, i) => ({
+    name: s.name, lines: s.lines, ms: s.ms,
+    pos: plan.chunks ? plan.chunks[i].positive_styles : uniq([...plan.sections[i].positive_local_styles, ...g.pos]),
+    neg: plan.chunks ? plan.chunks[i].negative_styles : g.neg,
+  }));
+  return { problems, totalMs, body, sections: summary };
 }
 
 // ---------- API ----------
@@ -276,7 +281,7 @@ async function callApi(path, init) {
   try {
     res = await fetch(apiBase() + path, {
       ...init,
-      headers: { 'xi-api-key': key, 'Content-Type': 'application/json', ...(init.headers || {}) },
+      headers: { 'xi-api-key': key, ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(init.headers || {}) },
     });
   } catch (err) {
     throw networkError(err);
@@ -285,13 +290,157 @@ async function callApi(path, init) {
   return res;
 }
 
-async function compose(body, signal) {
+/** Generate audio. Returns { blob, songId, storeNote }.
+    With `store`, the detailed endpoint is asked to keep the song on ElevenLabs (store_for_inpainting) so
+    single sections can be rewritten later; that gives back a song_id. If ElevenLabs refuses that request
+    with a 4xx that is not about the key or credits, we fall back to the plain endpoint and say so. */
+async function compose(body, signal, store, totalMs, timestamps = true) {
+  const notes = [];
+  // The detailed endpoint gives word timestamps (karaoke) and, when storing, a song id (rewrites).
+  // Try it with storing, then without, before falling back to the plain endpoint; each refusal is reported.
+  const attempts = [];
+  if (store) attempts.push({ store_for_inpainting: true, with_timestamps: timestamps });
+  if (timestamps) attempts.push({ with_timestamps: true });
+  for (const extra of attempts) {
+    try {
+      const res = await callApi(`/v1/music/detailed?output_format=${OUTPUT_FORMAT}`, {
+        method: 'POST', body: JSON.stringify({ ...body, ...extra }),
+        headers: { Accept: 'multipart/mixed, application/json' }, signal,
+      });
+      const { json, blob } = await parseDetailed(res);
+      if (!blob || !blob.size) throw new Error('The API returned no audio in its detailed response.');
+      const songId = findKey(json, 'song_id');
+      const words = extractWords(json, totalMs);
+      if (store && !extra.store_for_inpainting) notes.push('Generated without storing, so this take cannot be rewritten by section.');
+      else if (store && typeof songId !== 'string') notes.push('ElevenLabs did not return a song id, so this take cannot be rewritten by section.');
+      if (timestamps && !words.length) notes.push('No word timing came back, so there is no karaoke view for this take.');
+      return { blob, songId: typeof songId === 'string' ? songId : null, words, detail: json, storeNote: notes.join(' ') || null };
+    } catch (err) {
+      const code = (err.message || '').match(/^(\d{3}) /);
+      if (!code || ['401', '402', '429'].includes(code[1])) throw err;
+      notes.push(`ElevenLabs refused the ${extra.store_for_inpainting ? 'stored' : 'detailed'} generation (${err.message.split('\n')[0]}).`);
+    }
+  }
   const res = await callApi(`/v1/music?output_format=${OUTPUT_FORMAT}`, {
     method: 'POST', body: JSON.stringify(body), headers: { Accept: 'audio/mpeg' }, signal,
   });
   const blob = await res.blob();
   if (!blob.size) throw new Error('The API returned an empty audio file.');
-  return blob;
+  if (attempts.length) notes.push('Generated plainly: no section rewrites and no karaoke timing for this take.');
+  return { blob, songId: null, words: [], detail: null, storeNote: notes.join(' ') || null };
+}
+
+/** Pull word timestamps out of the detailed response, whatever ElevenLabs calls the fields.
+    Returns [{ text, start, end }] with times in milliseconds, sorted by start. */
+function extractWords(json, totalMs) {
+  let raw = findKey(json, 'words_timestamps') ?? findKey(json, 'word_timestamps') ?? findKey(json, 'words');
+  if (!Array.isArray(raw)) return [];
+  raw = raw.flat(2).filter(w => w && typeof w === 'object');
+  const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v) ? +v : null));
+  let unitHint = null;
+  const items = raw.map(w => {
+    const text = String(w.word ?? w.text ?? w.value ?? '').trim();
+    let start = num(w.start_ms ?? w.start_time_ms);
+    let end = num(w.end_ms ?? w.end_time_ms);
+    if (start != null || end != null) unitHint = 'ms';
+    if (start == null) start = num(w.start ?? w.start_time ?? w.start_s ?? w.start_seconds ?? w.timestamp);
+    if (end == null) end = num(w.end ?? w.end_time ?? w.end_s ?? w.end_seconds);
+    return { text, start, end };
+  }).filter(w => w.text && w.start != null);
+  if (!items.length) return [];
+  if (unitHint !== 'ms') {
+    // Decide between seconds and milliseconds from the largest time seen.
+    const maxT = Math.max(...items.map(w => Math.max(w.start, w.end ?? w.start)));
+    const seconds = totalMs ? maxT <= (totalMs / 1000) * 1.5 : maxT < 1200;
+    if (seconds) items.forEach(w => { w.start *= 1000; if (w.end != null) w.end *= 1000; });
+  }
+  items.sort((a, b) => a.start - b.start);
+  items.forEach((w, i) => {
+    if (w.end == null || w.end < w.start) w.end = i + 1 < items.length ? items[i + 1].start : w.start + 400;
+    w.start = Math.round(w.start); w.end = Math.round(w.end);
+  });
+  return items.filter(w => !/^[\[(].*[\])]$/.test(w.text));
+}
+
+/** Upload an existing take so ElevenLabs can use it as inpainting source. Returns its song_id. */
+async function uploadTake(blob, { timestamps = false, totalMs = 0 } = {}) {
+  const fd = new FormData();
+  fd.append('file', blob, 'take.mp3');
+  if (timestamps) fd.append('with_timestamps', 'true');
+  const res = await callApi('/v1/music/upload', { method: 'POST', body: fd });
+  const json = await res.json();
+  const songId = findKey(json, 'song_id');
+  return { songId: typeof songId === 'string' ? songId : null, words: extractWords(json, totalMs), json };
+}
+
+async function uploadForInpainting(blob) {
+  const { songId, json } = await uploadTake(blob);
+  if (!songId) throw new Error('The upload succeeded but no song id came back: ' + JSON.stringify(json).slice(0, 200));
+  return songId;
+}
+
+/** Depth-first search for a key in nested JSON. */
+function findKey(obj, key) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  if (Object.prototype.hasOwnProperty.call(obj, key)) return obj[key];
+  for (const v of Object.values(obj)) {
+    const hit = findKey(v, key);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+const TEXT = new TextDecoder();
+function indexOfBytes(hay, needle, from) {
+  outer: for (let i = from; i <= hay.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+/** Split the detailed endpoint's multipart/mixed (or JSON) response into { json, blob }. */
+async function parseDetailed(res) {
+  const ct = res.headers.get('content-type') || '';
+  const buf = new Uint8Array(await res.arrayBuffer());
+  const bm = ct.match(/boundary="?([^";]+)"?/i);
+  if (!bm) {
+    if (/json/i.test(ct)) {
+      const json = JSON.parse(TEXT.decode(buf));
+      const b64 = findKey(json, 'audio_base64') ?? findKey(json, 'audio_base_64') ?? findKey(json, 'audio');
+      if (typeof b64 === 'string') {
+        const bin = atob(b64.replace(/^data:[^,]*,/, ''));
+        const bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
+        return { json, blob: new Blob([bytes], { type: 'audio/mpeg' }) };
+      }
+      throw new Error('The detailed response had no audio in it.');
+    }
+    throw new Error('Unexpected response type from the detailed endpoint: ' + ct);
+  }
+  const delim = new TextEncoder().encode('--' + bm[1]);
+  let json = null, blob = null;
+  let at = indexOfBytes(buf, delim, 0);
+  while (at !== -1) {
+    const start = at + delim.length;
+    if (buf[start] === 0x2d && buf[start + 1] === 0x2d) break; // closing delimiter
+    const next = indexOfBytes(buf, delim, start);
+    let part = buf.subarray(start, next === -1 ? buf.length : next);
+    let s = 0; if (part[0] === 13 && part[1] === 10) s = 2; else if (part[0] === 10) s = 1;
+    let e = part.length; if (part[e - 2] === 13 && part[e - 1] === 10) e -= 2; else if (part[e - 1] === 10) e -= 1;
+    part = part.subarray(s, e);
+    let hdrEnd = indexOfBytes(part, [13, 10, 13, 10], 0), skip = 4;
+    if (hdrEnd === -1) { hdrEnd = indexOfBytes(part, [10, 10], 0); skip = 2; }
+    const headers = hdrEnd === -1 ? '' : TEXT.decode(part.subarray(0, hdrEnd)).toLowerCase();
+    const body = hdrEnd === -1 ? part : part.subarray(hdrEnd + skip);
+    const type = (headers.match(/content-type:\s*([^;\r\n]+)/) || [])[1] || '';
+    if (/json/.test(type) || (!type && body[0] === 0x7b)) {
+      try { json = JSON.parse(TEXT.decode(body)); } catch { /* not JSON after all */ }
+    } else if (/audio|octet/.test(type) || (!type && body.length > 64)) {
+      blob = new Blob([body], { type: type.startsWith('audio') ? type : 'audio/mpeg' });
+    }
+    at = next;
+  }
+  return { json, blob };
 }
 
 async function draftPlan(prompt, lengthMs, model) {
@@ -374,7 +523,7 @@ const el = {
   lengthHint: $('length-hint'), model: $('model'), mode: $('mode'), generate: $('generate'), cancel: $('cancel'),
   status: $('status'), error: $('error'), takes: $('takes'), takesEmpty: $('takes-empty'), takesCount: $('takes-count'),
   settings: $('settings'), apiKey: $('api-key'), apiBase: $('api-base'), keyCheck: $('key-check'),
-  banner: $('setup-banner'), topic: $('topic'), draftBtn: $('draft-btn'),
+  banner: $('setup-banner'), topic: $('topic'), draftBtn: $('draft-btn'), store: $('store'),
 };
 
 function formState() {
@@ -390,6 +539,7 @@ function formState() {
     lengthSec: parseInt(el.length.value, 10),
     model: el.model.value,
     mode: el.mode.value,
+    store: el.store.checked,
   };
 }
 
@@ -409,6 +559,7 @@ function loadDraft() {
   if (d.lengthSec) el.length.value = d.lengthSec;
   if (d.model) el.model.value = d.model;
   if (d.mode) el.mode.value = d.mode;
+  if (typeof d.store === 'boolean') el.store.checked = d.store;
   for (const b of el.moods.querySelectorAll('.chip')) b.setAttribute('aria-pressed', String((d.moods || []).includes(b.dataset.mood)));
   const out = document.querySelector(`input[name=output][value=${['song', 'acappella', 'instrumental'].includes(d.output) ? d.output : 'song'}]`);
   if (out) out.checked = true;
@@ -462,7 +613,8 @@ async function generate() {
   const tick = setInterval(() => setStatus(`Generating ${fmtSec(req.totalMs)} of audio… ${Math.round((Date.now() - started) / 1000)}s`, 'busy'), 1000);
   setStatus(`Generating ${fmtSec(req.totalMs)} of audio…`, 'busy');
   try {
-    const blob = await compose(req.body, ctrl.signal);
+    const store = el.store.checked && o.output !== 'instrumental';
+    const { blob, songId, words, storeNote } = await compose(req.body, ctrl.signal, store, req.totalMs, o.output !== 'instrumental');
     const firstLine = parseLyrics(o.lyrics).flatMap(s => s.lines)[0] || '';
     const take = {
       id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
@@ -472,6 +624,9 @@ async function generate() {
       mode: o.mode,
       output: o.output,
       lyrics: o.lyrics,
+      sections: req.sections || null,
+      songId: songId || null,
+      words: words || [],
       plannedMs: req.totalMs,
       request: req.body,
       mime: blob.type || 'audio/mpeg',
@@ -479,7 +634,7 @@ async function generate() {
     };
     await db.add(take);
     await renderTakes();
-    setStatus(`Done in ${Math.round((Date.now() - started) / 1000)}s. Your take is on the right.`, 'ok');
+    setStatus(`Done in ${Math.round((Date.now() - started) / 1000)}s. Your take is on the right.` + (storeNote ? ' ' + storeNote : ''), storeNote ? '' : 'ok');
   } catch (err) {
     setStatus('');
     showError(err.message || String(err));
@@ -506,14 +661,17 @@ async function renderTakes() {
     <article class="take" data-id="${esc(t.id)}">
       <div class="head">
         <h3>${esc(t.title)}</h3>
-        <span class="meta">${esc(OUTPUT_LABEL[t.output] || t.output)} · ${esc(t.model)} · ${fmtSec(t.plannedMs)} · ${new Date(t.createdAt).toLocaleString()}</span>
+        <span class="meta">${esc(OUTPUT_LABEL[t.output] || t.output)} · ${esc(t.model)} · ${fmtSec(t.plannedMs)} · ${new Date(t.createdAt).toLocaleString()}${t.songId ? ' · <span class="badge">editable</span>' : ''}${hasWords(t) ? ' · <span class="badge">timed</span>' : ''}</span>
       </div>
       <audio controls preload="metadata" src="${urlFor(t)}"></audio>
       <div class="tools">
         <a class="btn ghost small" href="${urlFor(t)}" download="${esc(fileName(t))}">Download MP3</a>
+        ${hasWords(t) ? '<button type="button" class="btn ghost small" data-act="karaoke" aria-pressed="false">Karaoke</button><button type="button" class="btn ghost small" data-act="lrc">Lyrics .lrc</button><button type="button" class="btn ghost small" data-act="srt">Subtitles .srt</button>' : (t.output !== 'instrumental' ? '<button type="button" class="btn ghost small" data-act="timing">Get word timing</button>' : '')}
+        ${canRewrite(t) ? '<button type="button" class="btn ghost small" data-act="rewrite">Rewrite a section</button>' : ''}
         <button type="button" class="btn ghost small" data-act="reuse">Load settings</button>
         <button type="button" class="btn ghost small danger" data-act="delete">Delete</button>
       </div>
+      <div class="karaoke" hidden></div>
       <details><summary>Request sent to the API</summary><pre>${esc(JSON.stringify(t.request, null, 2))}</pre></details>
     </article>`).join('');
 }
@@ -535,6 +693,47 @@ el.takes.addEventListener('click', async e => {
     await db.del(id);
     if (urls.has(id)) { URL.revokeObjectURL(urls.get(id)); urls.delete(id); }
     renderTakes();
+  } else if (btn.dataset.act === 'rewrite') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (t) openRewrite(t);
+  } else if (btn.dataset.act === 'karaoke') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (t) toggleKaraoke(art, t, btn);
+  } else if (btn.dataset.act === 'lrc' || btn.dataset.act === 'srt') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (!t) return;
+    const lrc = btn.dataset.act === 'lrc';
+    const text = lrc ? toLRC(t) : toSRT(t);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    a.download = fileName(t).replace(/\.mp3$/, lrc ? '.lrc' : '.srt');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } else if (btn.dataset.act === 'timing') {
+    const takes = await db.all();
+    const t = takes.find(x => x.id === id);
+    if (!t) return;
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    showError('');
+    try {
+      const { songId, words } = await uploadTake(t.blob, { timestamps: true, totalMs: t.plannedMs });
+      if (songId && !t.songId) t.songId = songId;
+      if (!words.length) throw new Error('ElevenLabs accepted the upload but returned no word timing for it.');
+      t.words = words;
+      await db.add(t);
+      await renderTakes();
+      setStatus(`Word timing added: ${words.length} words.`, 'ok');
+    } catch (err) {
+      showError(err.message || String(err));
+      btn.disabled = false;
+      btn.textContent = 'Get word timing';
+    }
   } else if (btn.dataset.act === 'reuse') {
     const takes = await db.all();
     const t = takes.find(x => x.id === id);
@@ -585,6 +784,7 @@ el.moods.addEventListener('click', e => {
 
 for (const input of [el.lyrics, el.length, el.mode]) input.addEventListener('input', () => { renderStructure(); saveDraft(); });
 for (const input of [el.genre, el.voice, el.tempo, el.extra, el.avoid, el.model]) input.addEventListener('input', saveDraft);
+el.store.addEventListener('change', saveDraft);
 for (const r of document.querySelectorAll('input[name=output]')) r.addEventListener('change', () => { renderStructure(); saveDraft(); });
 
 el.generate.addEventListener('click', generate);
@@ -612,6 +812,252 @@ el.draftBtn.addEventListener('click', async () => {
     showError(err.message || String(err));
   } finally {
     el.draftBtn.disabled = false;
+  }
+});
+
+// ---------- Karaoke: word timing, display and export ----------
+
+function hasWords(t) { return Array.isArray(t.words) && t.words.length > 0; }
+
+const normTok = s => s.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
+
+/** Group timed words into lines. Uses the take's lyric lines when they exist (count-based with
+    token matching to resync), otherwise splits on pauses. Returns [{ words: [{text,start,end}] }]. */
+function groupWords(words, lyricLines) {
+  const lines = [];
+  const toks = (lyricLines || []).map(l => l.split(/\s+/).map(normTok).filter(Boolean)).filter(l => l.length);
+  if (toks.length) {
+    let wi = 0;
+    for (let li = 0; li < toks.length && wi < words.length; li++) {
+      const line = { words: [] };
+      let ti = 0;
+      while (wi < words.length && ti < toks[li].length) {
+        const w = words[wi];
+        const nw = normTok(w.text);
+        if (nw === toks[li][ti] || !nw) { line.words.push(w); wi++; ti++; continue; }
+        // Resync: does this API word start the next line, or does the lyric token appear a little later?
+        const nextLine = toks[li + 1];
+        if (nextLine && nw === nextLine[0] && ti >= Math.ceil(toks[li].length / 2)) break;
+        const ahead = toks[li].slice(ti + 1, ti + 3).indexOf(nw);
+        if (ahead !== -1) { ti += ahead + 1; line.words.push(w); wi++; ti++; continue; }
+        line.words.push(w); wi++; ti++;
+      }
+      if (line.words.length) lines.push(line);
+    }
+    if (wi < words.length) lines.push({ words: words.slice(wi) });
+    return lines;
+  }
+  let cur = { words: [] };
+  words.forEach((w, i) => {
+    const prev = words[i - 1];
+    if (cur.words.length && (w.start - prev.end > 700 || cur.words.length >= 10)) { lines.push(cur); cur = { words: [] }; }
+    cur.words.push(w);
+  });
+  if (cur.words.length) lines.push(cur);
+  return lines;
+}
+
+function lyricLinesOf(t) {
+  const secs = sectionsOf(t);
+  if (secs) return secs.flatMap(s => s.lines);
+  if (t.lyrics) return parseLyrics(t.lyrics).flatMap(s => s.lines);
+  return [];
+}
+
+const lrcTime = ms => { const m = Math.floor(ms / 60000), sec = (ms % 60000) / 1000; return `${String(m).padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`; };
+const srtTime = ms => { const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, sec = Math.floor(ms / 1000) % 60, f = ms % 1000; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(f).padStart(3, '0')}`; };
+
+/** Enhanced LRC: a line tag plus a tag before every word, which karaoke players use to highlight word by word. */
+function toLRC(t) {
+  const out = [`[ti:${t.title}]`, '[ar:VocalForge]', `[length:${lrcTime(t.plannedMs || 0)}]`, '[re:VocalForge]', ''];
+  for (const line of groupWords(t.words, lyricLinesOf(t))) {
+    out.push(`[${lrcTime(line.words[0].start)}]` + line.words.map(w => `<${lrcTime(w.start)}>${w.text}`).join(' ') + `<${lrcTime(line.words[line.words.length - 1].end)}>`);
+  }
+  return out.join('\n') + '\n';
+}
+
+function toSRT(t) {
+  return groupWords(t.words, lyricLinesOf(t)).map((line, i) =>
+    `${i + 1}\n${srtTime(line.words[0].start)} --> ${srtTime(line.words[line.words.length - 1].end)}\n${line.words.map(w => w.text).join(' ')}\n`
+  ).join('\n');
+}
+
+const karaokeLoops = new Map();
+function toggleKaraoke(art, t, btn) {
+  const box = art.querySelector('.karaoke');
+  const audio = art.querySelector('audio');
+  const on = box.hidden;
+  btn.setAttribute('aria-pressed', String(on));
+  if (!on) { box.hidden = true; box.innerHTML = ''; cancelAnimationFrame(karaokeLoops.get(t.id)); karaokeLoops.delete(t.id); return; }
+  const lines = groupWords(t.words, lyricLinesOf(t));
+  box.innerHTML = lines.map(line => '<p class="kline">' + line.words.map(w => `<span class="kw" data-s="${w.start}" data-e="${w.end}">${esc(w.text)}</span>`).join(' ') + '</p>').join('');
+  box.hidden = false;
+  const spans = [...box.querySelectorAll('.kw')];
+  let lastLine = null;
+  const paint = ms => {
+    let cur = null;
+    for (const sp of spans) {
+      const s = +sp.dataset.s, e = +sp.dataset.e;
+      const state = ms >= e ? 'done' : (ms >= s ? 'now' : '');
+      if (sp.dataset.state !== state) { sp.dataset.state = state; sp.className = 'kw' + (state ? ' ' + state : ''); }
+      if (state === 'now') cur = sp;
+    }
+    const line = cur && cur.parentElement;
+    if (line && line !== lastLine) { lastLine = line; line.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  };
+  const loop = () => { paint(audio.currentTime * 1000); karaokeLoops.set(t.id, requestAnimationFrame(loop)); };
+  loop();
+  box.addEventListener('click', e => {
+    const sp = e.target.closest('.kw');
+    if (sp) { audio.currentTime = +sp.dataset.s / 1000; audio.play().catch(() => {}); }
+  });
+}
+
+// ---------- Rewriting sections (inpainting) ----------
+
+/** Sections of a take with their lengths and styles, derived for takes made before this was stored. */
+function sectionsOf(t) {
+  if (Array.isArray(t.sections) && t.sections.length) return t.sections;
+  const chunks = t.request && t.request.composition_plan && t.request.composition_plan.chunks;
+  if (!chunks || t.lyrics == null) return null;
+  const parsed = parseLyrics(t.lyrics);
+  if (parsed.length !== chunks.length) return null;
+  return parsed.map((s, i) => ({ name: s.name, lines: s.lines, ms: chunks[i].duration_ms, pos: chunks[i].positive_styles || [], neg: chunks[i].negative_styles || [] }));
+}
+
+function canRewrite(t) {
+  return t.output !== 'instrumental' && t.model !== 'music_v1' && !!sectionsOf(t);
+}
+
+function sectionsToLyrics(sections) {
+  return sections.map(s => `[${s.name} ${fmtSec(s.ms)}]\n${s.lines.join('\n')}`).join('\n\n') + '\n';
+}
+
+let rwTake = null;
+const rw = {
+  dialog: $('rewrite'), sections: $('rw-sections'), cost: $('rw-cost'), status: $('rw-status'), error: $('rw-error'),
+  upload: $('rw-upload'), title: $('rw-title'), go: $('rw-go'), cancel: $('rw-cancel'),
+};
+
+function openRewrite(t) {
+  rwTake = t;
+  const secs = sectionsOf(t);
+  rw.title.textContent = t.title;
+  rw.upload.hidden = !!t.songId;
+  rw.sections.innerHTML = secs.map((s, i) => `
+    <div class="rw-sec" data-i="${i}">
+      <label class="rw-head"><input type="checkbox" class="rw-pick"> <b>${esc(s.name)}</b> <span class="meta">· ${fmtSec(s.ms)}${s.lines.length ? '' : ' · no words'}</span></label>
+      <textarea class="rw-text" rows="${Math.min(12, Math.max(2, s.lines.length + 1))}" data-orig="${esc(s.lines.join('\n'))}">${esc(s.lines.join('\n'))}</textarea>
+    </div>`).join('');
+  rw.error.hidden = true;
+  rw.status.textContent = '';
+  rw.status.className = 'status';
+  rw.go.disabled = false;
+  updateRewriteCost();
+  rw.dialog.showModal();
+}
+
+function rewritePicks() {
+  return [...rw.sections.querySelectorAll('.rw-sec')].map(div => ({
+    pick: div.querySelector('.rw-pick').checked,
+    text: div.querySelector('.rw-text').value,
+  }));
+}
+
+function updateRewriteCost() {
+  if (!rwTake) return;
+  const secs = sectionsOf(rwTake);
+  const picks = rewritePicks();
+  const redo = secs.filter((s, i) => picks[i].pick);
+  const ms = redo.reduce((a, s) => a + s.ms, 0);
+  rw.cost.textContent = redo.length
+    ? `Regenerating ${redo.length} section${redo.length === 1 ? '' : 's'} (${fmtSec(ms)} of audio, the only part charged). The other ${fmtSec(secs.reduce((a, s) => a + s.ms, 0) - ms)} is kept as it is.`
+    : 'Tick the sections to regenerate, or just edit their lines.';
+}
+
+rw.sections.addEventListener('input', e => {
+  const ta = e.target.closest('.rw-text');
+  if (ta) {
+    const changed = ta.value.trim() !== ta.dataset.orig.trim();
+    if (changed) ta.closest('.rw-sec').querySelector('.rw-pick').checked = true;
+  }
+  updateRewriteCost();
+});
+rw.cancel.addEventListener('click', () => rw.dialog.close());
+
+rw.go.addEventListener('click', async () => {
+  const t = rwTake;
+  if (!t) return;
+  const secs = sectionsOf(t);
+  const picks = rewritePicks();
+  rw.error.hidden = true;
+  if (!picks.some(p => p.pick)) { rw.error.textContent = 'Tick at least one section to regenerate.'; rw.error.hidden = false; return; }
+  const newSections = secs.map((s, i) => {
+    const lines = picks[i].pick ? picks[i].text.split(/\r?\n/).map(l => l.trim()).filter(Boolean) : s.lines;
+    return { ...s, lines };
+  });
+  const problems = [];
+  newSections.forEach((s, i) => {
+    if (!picks[i].pick) return;
+    if (s.lines.length > LIMITS.maxLinesPerChunk) problems.push(`[${s.name}] has ${s.lines.length} lines; the limit is ${LIMITS.maxLinesPerChunk}.`);
+    const long = s.lines.find(l => l.length > LIMITS.maxLineChars);
+    if (long) problems.push(`A line in [${s.name}] is longer than ${LIMITS.maxLineChars} characters.`);
+  });
+  if (problems.length) { rw.error.textContent = problems.join('\n'); rw.error.hidden = false; return; }
+
+  rw.go.disabled = true;
+  const started = Date.now();
+  const busy = msg => { rw.status.textContent = msg; rw.status.className = 'status busy'; };
+  try {
+    let songId = t.songId;
+    if (!songId) {
+      busy('Uploading the original take to ElevenLabs…');
+      songId = await uploadForInpainting(t.blob);
+      t.songId = songId;
+      await db.add(t);
+    }
+    const model = t.model === 'music_v2' ? 'music_v2' : 'music_v2_5';
+    let offset = 0;
+    const chunks = newSections.map((s, i) => {
+      const chunk = picks[i].pick
+        ? { text: s.lines.join('\n'), duration_ms: s.ms, positive_styles: s.pos || [], negative_styles: s.neg || [], context_adherence: 'high' }
+        : { song_id: songId, range: { start_ms: offset, end_ms: offset + s.ms } };
+      offset += s.ms;
+      return chunk;
+    });
+    const body = { model_id: model, composition_plan: { chunks }, force_instrumental: false };
+    const redoMs = newSections.filter((s, i) => picks[i].pick).reduce((a, s) => a + s.ms, 0);
+    const tick = setInterval(() => busy(`Regenerating ${fmtSec(redoMs)}… ${Math.round((Date.now() - started) / 1000)}s`), 1000);
+    busy(`Regenerating ${fmtSec(redoMs)}…`);
+    let result;
+    try { result = await compose(body, undefined, true, offset); } finally { clearInterval(tick); }
+    const take = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
+      createdAt: Date.now(),
+      title: t.title.replace(/ \(rewrite( \d+)?\)$/, '') + ' (rewrite)',
+      model, mode: 'structured', output: t.output,
+      lyrics: sectionsToLyrics(newSections),
+      sections: newSections,
+      songId: result.songId || null,
+      words: result.words || [],
+      parentId: t.id,
+      plannedMs: offset,
+      request: body,
+      mime: result.blob.type || 'audio/mpeg',
+      blob: result.blob,
+    };
+    await db.add(take);
+    await renderTakes();
+    rw.dialog.close();
+    setStatus(`Rewrite done in ${Math.round((Date.now() - started) / 1000)}s. The new take is at the top of the list.` + (result.storeNote ? ' ' + result.storeNote : ''), result.storeNote ? '' : 'ok');
+    showError('');
+  } catch (err) {
+    rw.status.textContent = '';
+    rw.status.className = 'status';
+    rw.error.textContent = err.message || String(err);
+    rw.error.hidden = false;
+  } finally {
+    rw.go.disabled = false;
   }
 });
 
@@ -676,4 +1122,4 @@ renderTakes();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 // Exposed for tests and for poking around in the console.
-window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, LIMITS };
+window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, parseDetailed, sectionsOf, extractWords, groupWords, toLRC, toSRT, LIMITS };
