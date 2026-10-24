@@ -53,6 +53,7 @@ We're chasing down the falling stars
 - Lines without a tag before them are treated as a verse.
 - Limits from the API: at most 30 sections, 30 lines per section, 200 characters per line,
   3 seconds to 2 minutes per section, 10 minutes in total.
+  A pin outside 3s to 2:00 is rounded to the nearest limit and noted under the lyrics.
 
 ## Song files: set everything from one JSON
 
