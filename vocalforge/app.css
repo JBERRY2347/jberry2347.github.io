@@ -75,6 +75,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .structure .sec.instr { font-style: italic; }
 .structure .total { color: var(--muted); padding: 4px 2px; }
 .structure .problem { color: var(--bad); flex-basis: 100%; }
+.structure .note { color: var(--warn); flex-basis: 100%; }
 
 details.sub { border: 1px dashed var(--line); border-radius: 12px; padding: 10px 14px; margin-top: 12px; }
 details.sub summary { cursor: pointer; color: var(--muted); font-size: .9rem; }

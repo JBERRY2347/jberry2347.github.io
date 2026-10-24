@@ -110,6 +110,17 @@ function allocate(sections, totalMs) {
   return out;
 }
 
+/** Soft notes: things the app fixed on the user's behalf rather than refusing. */
+function sectionNotes(sections) {
+  const notes = [];
+  for (const s of sections) {
+    if (s.explicitMs != null && (s.explicitMs < LIMITS.chunkMinMs || s.explicitMs > LIMITS.chunkMaxMs)) {
+      notes.push(`[${s.name}] was pinned to ${fmtSec(s.explicitMs)}; ElevenLabs needs 3s to 2:00 per section, so it will be sent as ${fmtSec(s.ms)}.`);
+    }
+  }
+  return notes;
+}
+
 function validateSections(sections) {
   const problems = [];
   if (!sections.length) problems.push('Write some lyrics first.');
@@ -118,9 +129,6 @@ function validateSections(sections) {
     if (s.lines.length > LIMITS.maxLinesPerChunk) problems.push(`[${s.name}] has ${s.lines.length} lines; the limit is ${LIMITS.maxLinesPerChunk} per section. Split it with another tag.`);
     const long = s.lines.find(l => l.length > LIMITS.maxLineChars);
     if (long) problems.push(`A line in [${s.name}] is longer than ${LIMITS.maxLineChars} characters: “${long.slice(0, 40)}…”`);
-    if (s.explicitMs != null && (s.explicitMs < LIMITS.chunkMinMs || s.explicitMs > LIMITS.chunkMaxMs)) {
-      problems.push(`[${s.name}] is pinned to ${fmtSec(s.explicitMs)}; sections must be between 3s and 2:00.`);
-    }
   }
   const total = sections.reduce((a, s) => a + (s.ms || 0), 0);
   if (sections.length && total > LIMITS.totalMaxMs) problems.push(`Total length ${fmtSec(total)} is over the 10 minute limit.`);
@@ -583,7 +591,8 @@ function renderStructure() {
     `<span class="sec${s.explicitMs != null ? ' pinned' : ''}${s.lines.length ? '' : ' instr'}"><b>${esc(s.name)}</b> · ${s.lines.length ? s.lines.length + (s.lines.length === 1 ? ' line' : ' lines') : 'no words'} · ${fmtSec(s.ms)}</span>`
   ).join('') +
     `<span class="total">= ${fmtSec(total)} over ${sections.length} section${sections.length === 1 ? '' : 's'}</span>` +
-    problems.map(p => `<span class="problem">${esc(p)}</span>`).join('');
+    problems.map(p => `<span class="problem">${esc(p)}</span>`).join('') +
+    sectionNotes(sections).map(p => `<span class="note">${esc(p)}</span>`).join('');
   el.lengthHint.textContent = o.output === 'instrumental'
     ? 'Instrumental tracks are generated from the style description at this length; lyrics are only used as a theme hint.'
     : o.mode === 'freeform'
