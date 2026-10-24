@@ -1,7 +1,7 @@
 /* VocalForge service worker: caches the app shell so it opens offline.
    Shell files are served stale-while-revalidate, so an update lands on the next visit.
    Cross-origin calls (the ElevenLabs API) are never touched. */
-const CACHE = 'vocalforge-v3';
+const CACHE = 'vocalforge-v4';
 const SHELL = ['./', './index.html', './app.js', './app.css', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './privacy.html'];
 
 self.addEventListener('install', e => {

@@ -31,7 +31,18 @@
 
 <main class="layout">
   <section class="panel" aria-labelledby="h-lyrics">
-    <h2 id="h-lyrics">Lyrics</h2>
+    <div class="panel-head">
+      <h2 id="h-lyrics">Lyrics</h2>
+      <div class="file-tools">
+        <button type="button" class="btn ghost small" id="import-btn" title="Load a song settings file (.json)">Import song file</button>
+        <button type="button" class="btn ghost small" id="export-btn" title="Save every setting on this page as a .json file">Export song file</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </div>
+    </div>
+    <div class="field">
+      <label for="title">Title <span class="opt">optional</span></label>
+      <input id="title" type="text" placeholder="Names the take and its downloads" autocomplete="off">
+    </div>
     <div class="chips" id="tag-chips" aria-label="Insert a section tag">
       <button type="button" class="chip" data-tag="[Intro]">+ Intro</button>
       <button type="button" class="chip" data-tag="[Verse]">+ Verse</button>

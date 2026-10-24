@@ -54,6 +54,32 @@ We're chasing down the falling stars
 - Limits from the API: at most 30 sections, 30 lines per section, 200 characters per line,
   3 seconds to 2 minutes per section, 10 minutes in total.
 
+## Song files: set everything from one JSON
+
+**Import song file** (or drop a `.json` onto the Lyrics panel) fills in every choice on the page
+from one file; **Export song file** saves the current page as one, which is also the easiest way to
+get a template. [`song.example.json`](song.example.json) is a full example. Fields, all optional:
+
+| Field | Values |
+|---|---|
+| `title` | Names the take and its downloads. |
+| `lyrics` | Tagged lyrics text (or an array of lines). |
+| `sections` | Instead of `lyrics`: `[{ "name": "Chorus", "seconds": 18, "lines": ["…"] }]`. `ms` works too. |
+| `genre`, `extra`, `avoid` | Text, or an array of phrases. |
+| `voice` | `female`, `male`, `androgynous`, `duet`, `choir`, `child`, `rap-male`, `rap-female`. Any other text is added to Extra direction. |
+| `tempo` | `slow`, `mid`, `upbeat`, `fast`, a BPM number, or `""` to let the model pick. |
+| `moods` | Array from the mood chips (`emotional`, `upbeat`, `dreamy`, `dark`, `intimate`, `powerful`, `playful`, `melancholic`, `anthemic`). Others go to Extra direction. |
+| `output` | `song`, `acappella` (or `vocals`), `instrumental`. |
+| `length` | Seconds (or `"m:ss"`), 10 to 300. Pinned sections override it as usual. |
+| `model` | `music_v2_5`, `music_v2`, `music_v1`. |
+| `mode` | `structured` or `freeform`. |
+| `store` | `true` to keep the take editable on ElevenLabs. |
+| `generate` | `true` to start generating as soon as the file loads (needs the key already saved). |
+| `apiKey`, `apiHost` | Optional. Saves the key and host into this browser's Settings. Only put a key in a file you keep private. |
+
+Unknown fields and invalid values are skipped and listed in the status line under Generate; the
+rest of the file still applies.
+
 ## Modes
 
 **Structured** (default) sends one chunk per section through the API's composition plan, so
@@ -110,6 +136,7 @@ and adds the CORS headers; it does not store your key.
 |---|---|
 | `index.html`, `app.css`, `app.js` | The app. All logic is in `app.js`; `window.VocalForge` exposes the lyric parser, request builder and multipart parser for tinkering. |
 | `manifest.json`, `sw.js`, `icon*` | PWA bits so it installs as its own app and opens offline. |
+| `song.example.json` | A full song file to copy from. |
 | `privacy.html` | What is stored where. |
 | `relay/cloudflare-worker.js` | Optional CORS relay, see above. |
 

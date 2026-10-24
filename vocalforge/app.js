@@ -524,10 +524,12 @@ const el = {
   status: $('status'), error: $('error'), takes: $('takes'), takesEmpty: $('takes-empty'), takesCount: $('takes-count'),
   settings: $('settings'), apiKey: $('api-key'), apiBase: $('api-base'), keyCheck: $('key-check'),
   banner: $('setup-banner'), topic: $('topic'), draftBtn: $('draft-btn'), store: $('store'),
+  title: $('title'), importBtn: $('import-btn'), exportBtn: $('export-btn'), importFile: $('import-file'),
 };
 
 function formState() {
   return {
+    title: el.title.value.trim(),
     lyrics: el.lyrics.value,
     genre: el.genre.value,
     voice: el.voice.value,
@@ -550,6 +552,7 @@ function loadDraft() {
   let d;
   try { d = JSON.parse(localStorage.getItem(LS.draft) || 'null'); } catch { d = null; }
   if (!d) return;
+  el.title.value = d.title || '';
   el.lyrics.value = d.lyrics || '';
   el.genre.value = d.genre || '';
   if (d.voice) el.voice.value = d.voice;
@@ -619,7 +622,7 @@ async function generate() {
     const take = {
       id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
       createdAt: Date.now(),
-      title: firstLine.slice(0, 60) || 'Untitled take',
+      title: o.title.slice(0, 80) || firstLine.slice(0, 60) || 'Untitled take',
       model: o.model,
       mode: o.mode,
       output: o.output,
@@ -783,7 +786,7 @@ el.moods.addEventListener('click', e => {
 });
 
 for (const input of [el.lyrics, el.length, el.mode]) input.addEventListener('input', () => { renderStructure(); saveDraft(); });
-for (const input of [el.genre, el.voice, el.tempo, el.extra, el.avoid, el.model]) input.addEventListener('input', saveDraft);
+for (const input of [el.genre, el.voice, el.tempo, el.extra, el.avoid, el.model, el.title]) input.addEventListener('input', saveDraft);
 el.store.addEventListener('change', saveDraft);
 for (const r of document.querySelectorAll('input[name=output]')) r.addEventListener('change', () => { renderStructure(); saveDraft(); });
 
@@ -1061,6 +1064,175 @@ rw.go.addEventListener('click', async () => {
   }
 });
 
+// ---------- Song files: one JSON that makes every choice ----------
+
+const SONG_FILE_VERSION = 1;
+const OUTPUTS = ['song', 'acappella', 'instrumental'];
+const MODELS = ['music_v2_5', 'music_v2', 'music_v1'];
+const MODES = ['structured', 'freeform'];
+const MOOD_CHIPS = () => [...el.moods.querySelectorAll('.chip')].map(b => b.dataset.mood);
+
+/** Everything on the page as a plain object, the same shape the import reads. */
+function exportConfig() {
+  const o = formState();
+  return {
+    vocalforge: SONG_FILE_VERSION,
+    title: o.title,
+    lyrics: o.lyrics,
+    genre: o.genre,
+    voice: o.voice,
+    tempo: o.tempo,
+    moods: o.moods,
+    extra: o.extra,
+    avoid: o.avoid,
+    output: o.output,
+    length: o.lengthSec,
+    model: o.model,
+    mode: o.mode,
+    store: o.store,
+  };
+}
+
+const asList = v => (Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : splitList(v));
+
+/** Apply a song file to the page. Unknown or invalid values are skipped and reported, never fatal.
+    Returns { warnings: [], generate: boolean }. */
+function applyConfig(cfg) {
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error('The file must contain a JSON object with the song settings.');
+  const warnings = [];
+  const str = v => (v == null ? '' : String(v));
+  const has = k => Object.prototype.hasOwnProperty.call(cfg, k);
+
+  if (has('title')) el.title.value = str(cfg.title).trim();
+
+  // Lyrics: plain tagged text, or a sections array [{ name, lines, seconds|ms }].
+  if (Array.isArray(cfg.sections)) {
+    const parts = [];
+    cfg.sections.forEach((sec, i) => {
+      if (!sec || typeof sec !== 'object') { warnings.push(`sections[${i}] is not an object; skipped.`); return; }
+      const name = str(sec.name || sec.section || `Part ${i + 1}`).trim();
+      const ms = sec.ms != null ? +sec.ms : (sec.seconds != null ? +sec.seconds * 1000 : (sec.duration != null ? +sec.duration * 1000 : null));
+      const lines = Array.isArray(sec.lines) ? sec.lines.map(str) : str(sec.lines ?? sec.text ?? '').split(/\r?\n/);
+      parts.push(`[${name}${ms != null && Number.isFinite(ms) ? ' ' + fmtSec(ms) : ''}]`, ...lines.map(l => l.trim()).filter(Boolean), '');
+    });
+    el.lyrics.value = parts.join('\n').trim() + '\n';
+  } else if (has('lyrics')) {
+    el.lyrics.value = Array.isArray(cfg.lyrics) ? cfg.lyrics.map(str).join('\n') : str(cfg.lyrics);
+  }
+
+  if (has('genre')) el.genre.value = asList(cfg.genre).join(', ');
+  // Extra/avoid first: voice, tempo and mood fallbacks append to Extra direction.
+  if (has('extra')) el.extra.value = asList(cfg.extra).join(', ');
+  if (has('avoid')) el.avoid.value = asList(cfg.avoid).join(', ');
+  if (has('voice')) {
+    const v = str(cfg.voice).trim();
+    const key = Object.keys(VOICES).find(k => k === v.toLowerCase() || VOICES[k] === v.toLowerCase());
+    if (key) el.voice.value = key;
+    else if (v) {
+      // A free-text voice goes into the extra direction so it still reaches the model.
+      el.extra.value = [`voice: ${v}`, el.extra.value].filter(Boolean).join(', ');
+      warnings.push(`voice "${v}" is not one of the presets (${Object.keys(VOICES).join(', ')}); added it to Extra direction instead.`);
+    }
+  }
+  if (has('tempo')) {
+    const t = str(cfg.tempo).trim().toLowerCase();
+    if (t === '' || TEMPOS[t]) el.tempo.value = t;
+    else if (/^\d+$/.test(t)) { const bpm = +t; el.tempo.value = bpm < 85 ? 'slow' : bpm < 110 ? 'mid' : bpm < 132 ? 'upbeat' : 'fast'; el.extra.value = [`${bpm} BPM`, el.extra.value].filter(Boolean).join(', '); }
+    else warnings.push(`tempo "${t}" is not one of: ${Object.keys(TEMPOS).join(', ')} (or a BPM number); left as is.`);
+  }
+  if (has('moods')) {
+    const want = asList(cfg.moods).map(m => m.toLowerCase());
+    const known = MOOD_CHIPS();
+    for (const b of el.moods.querySelectorAll('.chip')) b.setAttribute('aria-pressed', String(want.includes(b.dataset.mood)));
+    const unknown = want.filter(m => !known.includes(m));
+    if (unknown.length) { el.extra.value = [...unknown, el.extra.value].filter(Boolean).join(', '); warnings.push(`moods ${unknown.map(m => `"${m}"`).join(', ')} are not chips; added to Extra direction.`); }
+  }
+  if (has('output')) {
+    const o = str(cfg.output).trim().toLowerCase().replace(/[\s_-]+/g, '');
+    const map = { song: 'song', fullsong: 'song', full: 'song', vocals: 'acappella', vocalsonly: 'acappella', acappella: 'acappella', acapella: 'acappella', instrumental: 'instrumental', beat: 'instrumental' };
+    if (map[o]) document.querySelector(`input[name=output][value=${map[o]}]`).checked = true;
+    else warnings.push(`output "${cfg.output}" is not one of: ${OUTPUTS.join(', ')}; left as is.`);
+  }
+  if (has('length') || has('lengthSec') || has('seconds')) {
+    const raw = cfg.length ?? cfg.lengthSec ?? cfg.seconds;
+    const sec = typeof raw === 'string' && /^\d+:\d{2}$/.test(raw.trim()) ? (+raw.split(':')[0] * 60 + +raw.split(':')[1]) : +raw;
+    if (Number.isFinite(sec) && sec > 0) el.length.value = clamp(Math.round(sec / 5) * 5, +el.length.min, +el.length.max);
+    else warnings.push(`length "${raw}" is not a number of seconds (or m:ss); left as is.`);
+  }
+  if (has('model')) {
+    const m = str(cfg.model).trim().toLowerCase().replace(/[.\s-]/g, '_').replace(/^music_?v?/, 'music_v').replace(/^v/, 'music_v');
+    const pick = MODELS.find(x => x === m) || MODELS.find(x => x === `music_v${m}`);
+    if (pick) el.model.value = pick; else warnings.push(`model "${cfg.model}" is not one of: ${MODELS.join(', ')}; left as is.`);
+  }
+  if (has('mode')) {
+    const m = str(cfg.mode).trim().toLowerCase();
+    if (MODES.includes(m)) el.mode.value = m; else warnings.push(`mode "${cfg.mode}" is not one of: ${MODES.join(', ')}; left as is.`);
+  }
+  if (has('store')) el.store.checked = !!cfg.store;
+
+  if (has('apiKey') && str(cfg.apiKey).trim()) localStorage.setItem(LS.key, str(cfg.apiKey).trim());
+  if (has('apiHost')) {
+    const base = str(cfg.apiHost).trim().replace(/\/+$/, '');
+    if (base && base !== API_DEFAULT) localStorage.setItem(LS.base, base); else localStorage.removeItem(LS.base);
+  }
+  refreshBanner();
+
+  const known = new Set(['vocalforge', 'title', 'lyrics', 'sections', 'genre', 'voice', 'tempo', 'moods', 'extra', 'avoid', 'output', 'length', 'lengthSec', 'seconds', 'model', 'mode', 'store', 'apiKey', 'apiHost', 'generate', 'notes', 'comment', '$schema']);
+  const extraKeys = Object.keys(cfg).filter(k => !known.has(k));
+  if (extraKeys.length) warnings.push(`Ignored unknown fields: ${extraKeys.join(', ')}.`);
+
+  renderStructure();
+  saveDraft();
+  return { warnings, generate: cfg.generate === true };
+}
+
+async function importSongFile(file) {
+  showError('');
+  let cfg;
+  try {
+    cfg = JSON.parse(await file.text());
+  } catch (err) {
+    showError(`${file.name} is not valid JSON: ${err.message}`);
+    return;
+  }
+  let result;
+  try { result = applyConfig(cfg); } catch (err) { showError(err.message); return; }
+  const summary = `Loaded ${file.name}.` + (result.warnings.length ? ' ' + result.warnings.join(' ') : '');
+  setStatus(summary, result.warnings.length ? '' : 'ok');
+  if (result.generate) {
+    if (!apiKey()) { showError('The file asks to generate right away, but there is no API key yet. Add it in Settings, then press Generate.'); return; }
+    generate();
+  }
+}
+
+el.importBtn.addEventListener('click', () => { el.importFile.value = ''; el.importFile.click(); });
+el.importFile.addEventListener('change', () => { const f = el.importFile.files && el.importFile.files[0]; if (f) importSongFile(f); });
+el.exportBtn.addEventListener('click', () => {
+  const cfg = exportConfig();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(cfg, null, 2) + '\n'], { type: 'application/json' }));
+  const slug = (cfg.title || parseLyrics(cfg.lyrics).flatMap(s => s.lines)[0] || 'song').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'song';
+  a.download = `${slug}.vocalforge.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+// Drop a .json anywhere on the lyrics panel.
+{
+  const panel = el.lyrics.closest('.panel');
+  let depth = 0;
+  panel.addEventListener('dragenter', e => { if ([...e.dataTransfer.types].includes('Files')) { depth++; panel.classList.add('dropping'); } });
+  panel.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; panel.classList.remove('dropping'); } });
+  panel.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+  panel.addEventListener('drop', e => {
+    depth = 0; panel.classList.remove('dropping');
+    const f = [...(e.dataTransfer.files || [])].find(x => /\.json$/i.test(x.name) || x.type === 'application/json');
+    if (f) { e.preventDefault(); importSongFile(f); }
+  });
+}
+
 // ---------- Settings ----------
 
 function openSettings() {
@@ -1122,4 +1294,4 @@ renderTakes();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 // Exposed for tests and for poking around in the console.
-window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, parseDetailed, sectionsOf, extractWords, groupWords, toLRC, toSRT, LIMITS };
+window.VocalForge = { parseLyrics, parseTag, allocate, buildRequest, globalStyles, planToLyrics, parseDetailed, sectionsOf, extractWords, groupWords, toLRC, toSRT, applyConfig, exportConfig, LIMITS };

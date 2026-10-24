@@ -143,3 +143,8 @@ footer a { color: var(--muted); }
 .kw.done { color: var(--text); }
 .kw.now { color: #fff; background: var(--grad); border-radius: 6px; padding: 0 4px; }
 .take .tools [aria-pressed="true"] { color: var(--text); border-color: var(--accent); }
+
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.panel-head h2 { margin: 0 0 10px; }
+.file-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.panel.dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }

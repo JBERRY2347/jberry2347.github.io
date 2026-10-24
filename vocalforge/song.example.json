@@ -1,0 +1,24 @@
+{
+  "vocalforge": 1,
+  "title": "H-Town Stampede",
+  "genre": "stadium rap rock anthem, trap drums, distorted power chord guitar",
+  "voice": "rap-male",
+  "tempo": "upbeat",
+  "moods": ["powerful", "anthemic"],
+  "extra": "four-on-the-floor kick and distorted guitar riff on the hooks, strip to 808 and hi-hats on the verses, gang vocal chants on the bridge",
+  "avoid": "autotune, soft vocals",
+  "output": "song",
+  "length": 150,
+  "model": "music_v2_5",
+  "mode": "structured",
+  "store": true,
+  "generate": false,
+  "sections": [
+    { "name": "Intro", "seconds": 10, "lines": ["Yeah... Houston, stand up.", "You hear that? That's the ground shaking."] },
+    { "name": "Hook", "seconds": 25, "lines": ["STAMPEDE! Hear the horns, feel the ground", "STAMPEDE! Red and blue, lock it down", "H-Town, we don't bend, we don't break", "Light it up, light it up, make the whole dome shake!"] },
+    { "name": "Verse 1", "seconds": 35, "lines": ["Space City, we launch, call it liftoff", "Third coast, steel toes, we don't kick off, we kick doors", "Bayou blood in the veins, built heavy", "Hurricane-tested, we been ready, stay steady"] },
+    { "name": "Bridge", "seconds": 20, "lines": ["WE. ARE. HOUSTON.", "(Horns! Horns! Horns!)", "Can't hold us, can't stop us, can't slow the charge"] },
+    { "name": "Final Hook", "seconds": 25, "lines": ["STAMPEDE! Hear the horns, feel the ground", "STAMPEDE! Red and blue, lock it down", "Houston, raise it up, let 'em know", "Light it up, light it up, HERE WE GO!"] },
+    { "name": "Outro", "seconds": 10, "lines": ["Stam-PEDE! Stam-PEDE! Stam-PEDE!"] }
+  ]
+}
