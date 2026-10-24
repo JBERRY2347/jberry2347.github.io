@@ -121,3 +121,27 @@ From the repo root:
 python3 -m http.server 8080
 # open http://localhost:8080/vocalforge/
 ```
+
+## Songbook and song files
+
+The **Songbook** dropdown at the top of the Lyrics panel loads a complete song in one tap: lyrics, voice, tempo, moods, extra direction, avoid list, output type and length. Songs shipped with the app live in `songbook.json`; **Import JSON…** adds a song file from your device and keeps it in the list on that device.
+
+A song file is a JSON object (or a `{ "songs": [ … ] }` list) with these fields; only `lyrics` is required:
+
+```json
+{
+  "id": "whose-house",
+  "title": "Whose House (Houston Cougars)",
+  "genre": "Stadium hype anthem, drumline and brass",
+  "voice": "rap-male",
+  "tempo": "upbeat",
+  "moods": ["upbeat", "powerful", "anthemic"],
+  "extra": "Shouted gang vocals on the chorus",
+  "avoid": "autotune, fade-out ending",
+  "output": "song",
+  "lengthSec": 200,
+  "lyrics": "[Intro 20s]\nWhose house? ... Coogs' house!\n\n[Verse 26s]\n…"
+}
+```
+
+`voice` is one of `female`, `male`, `androgynous`, `duet`, `choir`, `child`, `rap-male`, `rap-female`. `tempo` is `slow`, `mid`, `upbeat`, `fast` or empty. `output` is `song`, `acappella` or `instrumental`. Pin section lengths in the lyric tags (`[Chorus 16s]`) so the song lands on the length you want.
