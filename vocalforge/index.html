@@ -32,6 +32,16 @@
 <main class="layout">
   <section class="panel" aria-labelledby="h-lyrics">
     <h2 id="h-lyrics">Lyrics</h2>
+    <div class="row songbook">
+      <div class="field">
+        <label for="songbook">Songbook</label>
+        <select id="songbook"><option value="">Load a saved song…</option></select>
+      </div>
+      <button type="button" class="btn ghost small" id="songbook-load">Load</button>
+      <button type="button" class="btn ghost small" id="songbook-import">Import JSON…</button>
+      <input type="file" id="songbook-file" accept=".json,application/json" hidden>
+      <span class="hint">A song file fills the lyrics, voice, style, direction and length in one go. Your current draft is replaced. Imported songs stay in the list on this device.</span>
+    </div>
     <div class="chips" id="tag-chips" aria-label="Insert a section tag">
       <button type="button" class="chip" data-tag="[Intro]">+ Intro</button>
       <button type="button" class="chip" data-tag="[Verse]">+ Verse</button>

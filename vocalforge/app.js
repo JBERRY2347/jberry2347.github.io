@@ -1119,6 +1119,102 @@ loadDraft();
 renderStructure();
 refreshBanner();
 renderTakes();
+
+// --- Songbook: ready-made songs (songbook.json) plus any JSON files the user imports ---
+const songbook = { el: $('songbook'), btn: $('songbook-load'), importBtn: $('songbook-import'), file: $('songbook-file'), songs: [] };
+const LS_SONGBOOK = 'vocalforge.songbook';
+
+function normalizeSong(raw, i) {
+  if (!raw || typeof raw !== 'object' || typeof raw.lyrics !== 'string') return null;
+  const title = String(raw.title || `Imported song ${i + 1}`).slice(0, 120);
+  return {
+    id: String(raw.id || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `song-${i + 1}`),
+    title, lyrics: raw.lyrics,
+    genre: typeof raw.genre === 'string' ? raw.genre : '',
+    voice: typeof raw.voice === 'string' ? raw.voice : '',
+    tempo: typeof raw.tempo === 'string' ? raw.tempo : '',
+    moods: Array.isArray(raw.moods) ? raw.moods.map(String) : [],
+    extra: typeof raw.extra === 'string' ? raw.extra : '',
+    avoid: typeof raw.avoid === 'string' ? raw.avoid : '',
+    output: typeof raw.output === 'string' ? raw.output : 'song',
+    lengthSec: Number(raw.lengthSec) || 0,
+  };
+}
+function songsFrom(data) {
+  const list = Array.isArray(data) ? data : Array.isArray(data?.songs) ? data.songs : [data];
+  return list.map(normalizeSong).filter(Boolean);
+}
+function applySong(song) {
+  el.lyrics.value = song.lyrics || '';
+  el.genre.value = song.genre || '';
+  if (song.voice && [...el.voice.options].some(o => o.value === song.voice)) el.voice.value = song.voice;
+  el.tempo.value = [...el.tempo.options].some(o => o.value === song.tempo) ? song.tempo : '';
+  el.extra.value = song.extra || '';
+  el.avoid.value = song.avoid || '';
+  if (song.lengthSec) el.length.value = Math.min(300, Math.max(10, song.lengthSec));
+  for (const b of el.moods.querySelectorAll('.chip')) b.setAttribute('aria-pressed', String((song.moods || []).includes(b.dataset.mood)));
+  const out = document.querySelector(`input[name=output][value=${['song', 'acappella', 'instrumental'].includes(song.output) ? song.output : 'song'}]`);
+  if (out) out.checked = true;
+  renderStructure();
+  saveDraft();
+  el.status.textContent = `Loaded "${song.title}".`;
+  el.status.className = 'status ok';
+}
+function renderSongbook() {
+  if (!songbook.el) return;
+  const keep = songbook.el.value;
+  songbook.el.innerHTML = '<option value="">Load a saved song…</option>';
+  for (const s of songbook.songs) {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.title;
+    songbook.el.appendChild(o);
+  }
+  if ([...songbook.el.options].some(o => o.value === keep)) songbook.el.value = keep;
+}
+function savedSongs() {
+  try { return songsFrom(JSON.parse(localStorage.getItem(LS_SONGBOOK) || '[]')); } catch { return []; }
+}
+function addSongs(list) {
+  for (const s of list) {
+    const i = songbook.songs.findIndex(x => x.id === s.id);
+    if (i >= 0) songbook.songs[i] = s; else songbook.songs.push(s);
+  }
+  renderSongbook();
+}
+async function loadSongbook() {
+  if (!songbook.el) return;
+  let shipped = [];
+  try {
+    const r = await fetch('./songbook.json', { cache: 'no-cache' });
+    shipped = songsFrom(await r.json());
+  } catch { /* no shipped songbook */ }
+  addSongs(shipped);
+  addSongs(savedSongs());
+}
+if (songbook.btn) songbook.btn.addEventListener('click', () => {
+  const song = songbook.songs.find(s => s.id === songbook.el.value);
+  if (!song) { songbook.el.focus(); return; }
+  if (el.lyrics.value.trim() && !confirm(`Replace the current draft with "${song.title}"?`)) return;
+  applySong(song);
+});
+if (songbook.importBtn) songbook.importBtn.addEventListener('click', () => songbook.file.click());
+if (songbook.file) songbook.file.addEventListener('change', async () => {
+  const f = songbook.file.files && songbook.file.files[0];
+  songbook.file.value = '';
+  if (!f) return;
+  let list = [];
+  try { list = songsFrom(JSON.parse(await f.text())); } catch { list = []; }
+  if (!list.length) { showError('That file is not a VocalForge song: it needs at least a "lyrics" field.'); return; }
+  addSongs(list);
+  try {
+    const saved = savedSongs();
+    for (const s of list) { const i = saved.findIndex(x => x.id === s.id); if (i >= 0) saved[i] = s; else saved.push(s); }
+    localStorage.setItem(LS_SONGBOOK, JSON.stringify(saved));
+  } catch { /* storage blocked; the song still loads for this visit */ }
+  songbook.el.value = list[0].id;
+  if (!el.lyrics.value.trim() || confirm(`Replace the current draft with "${list[0].title}"?`)) applySong(list[0]);
+});
+loadSongbook();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
 // Exposed for tests and for poking around in the console.
