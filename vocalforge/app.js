@@ -1177,7 +1177,7 @@ function applyConfig(cfg) {
   }
   refreshBanner();
 
-  const known = new Set(['vocalforge', 'title', 'lyrics', 'sections', 'genre', 'voice', 'tempo', 'moods', 'extra', 'avoid', 'output', 'length', 'lengthSec', 'seconds', 'model', 'mode', 'store', 'apiKey', 'apiHost', 'generate', 'notes', 'comment', '$schema']);
+  const known = new Set(['vocalforge', 'id', 'title', 'lyrics', 'sections', 'genre', 'voice', 'tempo', 'moods', 'extra', 'avoid', 'output', 'length', 'lengthSec', 'seconds', 'model', 'mode', 'store', 'apiKey', 'apiHost', 'generate', 'notes', 'comment', '$schema']);
   const extraKeys = Object.keys(cfg).filter(k => !known.has(k));
   if (extraKeys.length) warnings.push(`Ignored unknown fields: ${extraKeys.join(', ')}.`);
 
@@ -1232,6 +1232,35 @@ el.exportBtn.addEventListener('click', () => {
     if (f) { e.preventDefault(); importSongFile(f); }
   });
 }
+
+// ---------- Songbook: ready-made songs shipped next to the app (songbook.json) ----------
+
+const songbook = { el: $('songbook'), btn: $('songbook-load'), songs: [] };
+async function loadSongbook() {
+  if (!songbook.el) return;
+  try {
+    const r = await fetch('./songbook.json', { cache: 'no-cache' });
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    songbook.songs = Array.isArray(data.songs) ? data.songs.filter(s => s && typeof s === 'object') : [];
+  } catch { songbook.songs = []; }
+  songbook.songs.forEach((s, i) => {
+    const o = document.createElement('option');
+    o.value = String(s.id ?? i);
+    o.textContent = String(s.title || s.id || `Song ${i + 1}`);
+    songbook.el.appendChild(o);
+  });
+  songbook.el.closest('.songbook').hidden = songbook.songs.length === 0;
+}
+if (songbook.btn) songbook.btn.addEventListener('click', () => {
+  const song = songbook.songs.find((s, i) => String(s.id ?? i) === songbook.el.value);
+  if (!song) return;
+  if (el.lyrics.value.trim() && !confirm(`Replace the current draft with "${song.title || song.id}"?`)) return;
+  showError('');
+  const { warnings } = applyConfig(song);
+  setStatus(`Loaded "${song.title || song.id}" from the songbook.` + (warnings.length ? ' ' + warnings.join(' ') : ''), warnings.length ? '' : 'ok');
+});
+loadSongbook();
 
 // ---------- Settings ----------
 

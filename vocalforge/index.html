@@ -39,6 +39,14 @@
         <input type="file" id="import-file" accept=".json,application/json" hidden>
       </div>
     </div>
+    <div class="row songbook" hidden>
+      <div class="field">
+        <label for="songbook">Songbook</label>
+        <select id="songbook"><option value="">Load a saved song…</option></select>
+      </div>
+      <button type="button" class="btn ghost small" id="songbook-load">Load</button>
+      <span class="hint">Fills the lyrics, voice, style, direction and length from songbook.json. Your current draft is replaced.</span>
+    </div>
     <div class="field">
       <label for="title">Title <span class="opt">optional</span></label>
       <input id="title" type="text" placeholder="Names the take and its downloads" autocomplete="off">

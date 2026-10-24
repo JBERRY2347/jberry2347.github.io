@@ -148,3 +148,6 @@ footer a { color: var(--muted); }
 .panel-head h2 { margin: 0 0 10px; }
 .file-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .panel.dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.songbook { margin-bottom: 12px; align-items: flex-end; }
+.songbook .field { flex: 1 1 220px; margin-bottom: 0; }
+.songbook .hint { flex-basis: 100%; margin-top: 2px; }

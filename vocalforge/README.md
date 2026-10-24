@@ -80,6 +80,10 @@ get a template. [`song.example.json`](song.example.json) is a full example. Fiel
 Unknown fields and invalid values are skipped and listed in the status line under Generate; the
 rest of the file still applies.
 
+**Songbook.** If a `songbook.json` sits next to the app (`{ "songs": [ { "id": "…", "title": "…",
+…same fields as above… } ] }`), a Songbook dropdown appears above the lyrics and loads any entry
+with one click. Edit that file to keep your own set of songs with the app.
+
 ## Modes
 
 **Structured** (default) sends one chunk per section through the API's composition plan, so
@@ -137,6 +141,7 @@ and adds the CORS headers; it does not store your key.
 | `index.html`, `app.css`, `app.js` | The app. All logic is in `app.js`; `window.VocalForge` exposes the lyric parser, request builder and multipart parser for tinkering. |
 | `manifest.json`, `sw.js`, `icon*` | PWA bits so it installs as its own app and opens offline. |
 | `song.example.json` | A full song file to copy from. |
+| `songbook.json` | Ready-made songs for the Songbook dropdown. |
 | `privacy.html` | What is stored where. |
 | `relay/cloudflare-worker.js` | Optional CORS relay, see above. |
 
