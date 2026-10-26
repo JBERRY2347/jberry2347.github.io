@@ -16,8 +16,17 @@
       "repo": "https://github.com/JBERRY2347/cuesight",
       "icon": "./cuesight/icon-192.png",
       "category": "Utilities",
-      "tags": ["camera", "microphone", "on-device", "offline", "PWA"],
-      "platforms": ["web", "android"],
+      "tags": [
+        "camera",
+        "microphone",
+        "on-device",
+        "offline",
+        "PWA"
+      ],
+      "platforms": [
+        "web",
+        "android"
+      ],
       "android_package": "io.github.jberry2347.cuesight",
       "privacy": "./cuesight/privacy.html",
       "status": "live"
@@ -31,8 +40,16 @@
       "repo": "https://github.com/JBERRY2347/holdtheline",
       "icon": "./holdtheline/icon-192.png",
       "category": "Games",
-      "tags": ["camera", "multiplayer", "on-device", "offline", "PWA"],
-      "platforms": ["web"],
+      "tags": [
+        "camera",
+        "multiplayer",
+        "on-device",
+        "offline",
+        "PWA"
+      ],
+      "platforms": [
+        "web"
+      ],
       "privacy": "./holdtheline/privacy.html",
       "status": "live"
     },
@@ -45,10 +62,38 @@
       "repo": "https://github.com/JBERRY2347/jberry2347.github.io/tree/main/vocalforge",
       "icon": "./vocalforge/icon-192.png",
       "category": "Music",
-      "tags": ["lyrics", "music", "bring your own key", "PWA"],
-      "platforms": ["web"],
+      "tags": [
+        "lyrics",
+        "music",
+        "bring your own key",
+        "PWA"
+      ],
+      "platforms": [
+        "web"
+      ],
       "privacy": "./vocalforge/privacy.html",
       "status": "beta"
+    },
+    {
+      "id": "pointscompass",
+      "name": "Points Compass",
+      "tagline": "Points & miles trip planner",
+      "description": "Where your credit card points go furthest: transfer ratios and bonuses, card credit tracking, award estimates and a trip builder. This copy works offline; live flight, hotel, dining and event searches, Hyatt rates and Ask Claude run in the claude.ai version linked from the page.",
+      "url": "./pointscompass/",
+      "repo": "https://github.com/JBERRY2347/jberry2347.github.io/tree/main/pointscompass",
+      "icon": "./pointscompass/icon-192.png",
+      "category": "Travel",
+      "tags": [
+        "travel",
+        "points",
+        "credit cards",
+        "offline",
+        "PWA"
+      ],
+      "platforms": [
+        "web"
+      ],
+      "status": "live"
     }
   ]
 }

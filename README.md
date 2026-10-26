@@ -26,6 +26,7 @@ installable as a PWA and works offline once visited.
 | `.well-known/assetlinks.json` | Digital Asset Links for the CueSight Android app (TWA). Keep this. |
 | `.nojekyll` | Tells Pages to serve files as-is (no Jekyll). |
 | `vocalforge/` | An app that lives in this repo rather than its own: AI vocals for your lyrics, served at `/vocalforge/`. See [`vocalforge/README.md`](vocalforge/README.md). |
+| `pointscompass/` | Points Compass, the points-and-miles trip planner, served at `/pointscompass/`. Offline copy of the claude.ai artifact (same `index.html`); the live searches run only on claude.ai. Updated by republishing the artifact and copying the file here. |
 | `kalshi/` | Not part of the site. A Python command line tool for trading on Kalshi; see [`kalshi/README.md`](kalshi/README.md). |
 | `.github/workflows/kalshi-autopilot.yml` | Scheduled run of the Kalshi autopilot. Off until the `KALSHI_AUTOPILOT_ENABLED` variable is set. |
 
